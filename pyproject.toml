@@ -1,5 +1,5 @@
 [project]
-name = "traptools"
+name = "CamTrapTools"
 version = "0.0.1"
 description = "Open-source toolkit for camera-trap projects: from SD card to ecological answers."
 readme = "README.md"
@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
-traptools = "traptools.cli:app"
+camtraptools = "camtraptools.cli:app"
 
 [dependency-groups]
 dev = ["pytest>=8.3"]

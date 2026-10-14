@@ -1,4 +1,4 @@
-from traptools.ingest import MEDIA_COLUMNS, build_media, find_images, is_image
+from camtraptools.ingest import MEDIA_COLUMNS, build_media, find_images, is_image
 
 
 def test_is_image_accepts_jpeg_in_any_case(tmp_path):

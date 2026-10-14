@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from traptools.ingest import read_timestamp
+from camtraptools.ingest import read_timestamp
 
 
 def test_reads_date_time_original(make_image):

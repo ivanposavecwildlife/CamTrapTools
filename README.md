@@ -1,4 +1,4 @@
-# traptools
+# 📷🛠️ CamTrapTools
 
 **Open-source toolkit for camera-trap projects: from SD card to ecological answers.**
 
@@ -17,7 +17,7 @@ single project can produce millions of images. Field teams routinely:
 - can't tell whether AI models actually work on *their* cameras and species
 - struggle to turn detections into ecological results and share the data openly
 
-`traptools` covers the whole workflow in one place. Every module reads and writes a
+CamTrapTools covers the whole workflow in one place. Every module reads and writes a
 [Camtrap DP](https://camtrap-dp.tdwg.org) package, the open standard for camera-trap
 data, so results can be published directly to [GBIF](https://www.gbif.org) and used
 with other tools.
@@ -43,17 +43,17 @@ SD card ─► ingest/check ─► detect/events ─► review ─► ecology �
 Requires [uv](https://docs.astral.sh/uv/).
 
 ```bash
-git clone https://github.com/ivanposavecwildlife/traptools
-cd traptools
+git clone https://github.com/ivanposavecwildlife/CamTrapTools
+cd CamTrapTools
 uv sync
-uv run traptools --help
+uv run camtraptools --help
 ```
 
 ## Usage
 
 ```bash
-uv run traptools ingest path/to/images --out my_project
-uv run traptools check my_project
+uv run camtraptools ingest path/to/images --out my_project
+uv run camtraptools check my_project
 ```
 
 ## Development

@@ -1,7 +1,7 @@
 from typer.testing import CliRunner
 
-from traptools import __version__
-from traptools.cli import app
+from camtraptools import __version__
+from camtraptools.cli import app
 
 runner = CliRunner()
 

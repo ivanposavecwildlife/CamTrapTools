@@ -99,7 +99,7 @@ def build_deployments(media: pd.DataFrame) -> pd.DataFrame:
     """Return one row per deployment with ``deploymentStart`` and ``deploymentEnd``.
 
     Bounds are derived from media timestamps; implausible timestamps (see
-    :mod:`traptools.check`) should not define the deployment period.
+    :mod:`camtraptools.check`) should not define the deployment period.
     """
     raise NotImplementedError
 

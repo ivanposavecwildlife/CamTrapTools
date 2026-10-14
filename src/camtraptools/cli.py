@@ -4,14 +4,14 @@ from pathlib import Path
 
 import typer
 
-from traptools import __version__, check, ingest
+from camtraptools import __version__, check, ingest
 
-app = typer.Typer(help="Camera-trap toolkit: from SD card to ecological answers.")
+app = typer.Typer(help="CamTrapTools: camera-trap toolkit, from SD card to ecological answers.")
 
 
 def _version(show: bool) -> None:
     if show:
-        typer.echo(f"traptools {__version__}")
+        typer.echo(f"CamTrapTools {__version__}")
         raise typer.Exit()
 
 
