@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+dist/
+# Camera-trap images are large: never commit them
+data/
+*.JPG
+*.jpg

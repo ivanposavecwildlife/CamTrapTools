@@ -1,0 +1,23 @@
+[project]
+name = "traptools"
+version = "0.0.1"
+description = "Open-source toolkit for camera-trap projects: from SD card to ecological answers."
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Ivan Posavec" }]
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.2",
+    "pillow>=11.0",
+    "typer>=0.15",
+]
+
+[project.scripts]
+traptools = "traptools.cli:app"
+
+[dependency-groups]
+dev = ["pytest>=8.3"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
