@@ -1,36 +1,46 @@
 # traptools
 
-**An open-source toolkit for camera-trap projects: from SD card to ecological answers.**
+**Open-source toolkit for camera-trap projects: from SD card to ecological answers.**
 
-> 🚧 Early development. Built in the open while I learn conservation technology.
-> See the [roadmap](#roadmap).
+![status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange)
+![license: MIT](https://img.shields.io/badge/license-MIT-blue)
+![python: 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
 
-## The problem
+## Why
 
 Camera traps are one of the main ways conservationists monitor wildlife, but a
-single project can produce millions of images. Field teams struggle to:
+single project can produce millions of images. Field teams routinely:
 
-- notice broken, moved or misconfigured cameras before months of data are lost
-- sort through huge numbers of empty images
-- check AI predictions efficiently
-- know whether AI models actually work on *their* cameras and species
-- turn detections into ecological results and share the data openly
+- lose months of data to broken, moved or misconfigured cameras that nobody noticed
+- spend most of their review time on empty images
+- have no efficient way to check AI predictions
+- can't tell whether AI models actually work on *their* cameras and species
+- struggle to turn detections into ecological results and share the data openly
 
-`traptools` handles each of these steps, with every module reading and writing the open
-[Camtrap DP](https://camtrap-dp.tdwg.org) standard, so its output can be published to
-GBIF and used with other tools.
+`traptools` covers the whole workflow in one place. Every module reads and writes a
+[Camtrap DP](https://camtrap-dp.tdwg.org) package, the open standard for camera-trap
+data, so results can be published directly to [GBIF](https://www.gbif.org) and used
+with other tools.
 
-## Roadmap
+## Workflow
 
-| Module | Command | Status |
-|---|---|---|
-| 1 | `ingest`, `check`: build the data package and check camera health | 🛠 in progress |
-| 2 | `detect`, `events`, `import`: AI labels with MegaDetector and SpeciesNet, grouped into animal visits | planned |
-| 3 | `review`: human review, least confident first | planned |
-| 4 | `evaluate`, `adapt`: measure the AI and fine-tune it for your region | planned |
-| 5 | `ecology`: occupancy and activity, and how much AI errors change them | planned |
+```
+SD card ─► ingest/check ─► detect/events ─► review ─► ecology ─► GBIF
+                                ▲              │
+                                └─── adapt ◄───┘
+```
 
-## Install (development)
+| Module | Commands | Purpose | Status |
+|---|---|---|---|
+| Ingest & QA | `ingest`, `check` | Build the data package; detect clock errors, outages and false-trigger problems | In development |
+| Detection | `detect`, `events`, `import` | MegaDetector and SpeciesNet inference, grouping photos into independent events, importing existing outputs | Planned |
+| Review | `review` | Local web app for checking AI labels, least confident first | Planned |
+| Evaluation | `evaluate`, `adapt` | Per-species accuracy and confidence thresholds; regional fine-tuning | Planned |
+| Ecology | `ecology` | Occupancy and activity analysis, and how sensitive results are to AI errors | Planned |
+
+## Installation
+
+Requires [uv](https://docs.astral.sh/uv/).
 
 ```bash
 git clone https://github.com/ivanposavecwildlife/traptools
@@ -46,6 +56,12 @@ uv run traptools ingest path/to/images --out my_project
 uv run traptools check my_project
 ```
 
+## Development
+
+```bash
+uv run pytest
+```
+
 ## License
 
-MIT
+[MIT](LICENSE)
