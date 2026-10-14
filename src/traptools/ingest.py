@@ -43,13 +43,56 @@ def read_timestamp(image_path: Path) -> datetime | None:
         return None
 
 
-def build_media(images_dir: Path) -> pd.DataFrame:
-    """Return one row per image with the Camtrap DP media fields.
+IMAGE_EXTENSIONS = {".jpg", ".jpeg"}
 
-    Required columns: ``mediaID``, ``deploymentID`` (subdirectory name),
-    ``timestamp``, ``filePath``, ``fileName``, ``fileMediatype``.
-    """
-    raise NotImplementedError
+
+def is_image(path: Path) -> bool:
+    """Return True for image files, skipping hidden files such as the
+    ``._IMG_0001.JPG`` copies macOS writes to SD cards."""
+    return path.suffix.lower() in IMAGE_EXTENSIONS and not path.name.startswith(".")
+
+
+def find_images(deployment_dir: Path) -> list[Path]:
+    """Return every image under ``deployment_dir``, including subfolders, sorted by path."""
+    images = []
+    for path in deployment_dir.rglob("*"):
+        if path.is_file() and is_image(path):
+            images.append(path)
+    return sorted(images)
+
+
+def media_row(image_path: Path, images_dir: Path, deployment_id: str) -> dict:
+    """Return the Camtrap DP media record for a single image."""
+    relative_path = image_path.relative_to(images_dir).as_posix()
+    return {
+        "mediaID": relative_path,
+        "deploymentID": deployment_id,
+        "timestamp": read_timestamp(image_path),
+        "filePath": relative_path,
+        "fileName": image_path.name,
+        "fileMediatype": "image/jpeg",
+    }
+
+
+MEDIA_COLUMNS = [
+    "mediaID",
+    "deploymentID",
+    "timestamp",
+    "filePath",
+    "fileName",
+    "fileMediatype",
+]
+
+
+def build_media(images_dir: Path) -> pd.DataFrame:
+    """Return one row per image; each top-level subfolder of ``images_dir`` is one deployment."""
+    rows = []
+    for deployment_dir in sorted(images_dir.iterdir()):
+        if not deployment_dir.is_dir() or deployment_dir.name.startswith("."):
+            continue
+        for image_path in find_images(deployment_dir):
+            rows.append(media_row(image_path, images_dir, deployment_dir.name))
+    return pd.DataFrame(rows, columns=MEDIA_COLUMNS)
 
 
 def build_deployments(media: pd.DataFrame) -> pd.DataFrame:
