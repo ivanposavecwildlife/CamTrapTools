@@ -1,8 +1,8 @@
-"""Module 1a: turn a folder of SD-card images into a Camtrap DP package.
+"""Build a Camtrap DP package from a directory of camera-trap images.
 
-Camtrap DP spec: https://camtrap-dp.tdwg.org
+Camtrap DP specification: https://camtrap-dp.tdwg.org
 
-Expected input layout (one subfolder per camera deployment):
+Expected input layout, one subdirectory per deployment:
 
     images/
         camera_A/
@@ -12,41 +12,39 @@ Expected input layout (one subfolder per camera deployment):
             ...
 """
 
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 
 
-def read_timestamp(image_path: Path):
-    """Return when the photo was taken, read from its EXIF metadata.
+def read_timestamp(image_path: Path) -> datetime | None:
+    """Return the capture time from the image's EXIF ``DateTimeOriginal`` tag.
 
-    TODO (week 5):
-    - Open the image with Pillow and read the EXIF tag DateTimeOriginal.
-    - Convert the "YYYY:MM:DD HH:MM:SS" string to a datetime.
-    - Return None when the tag is missing. Don't crash: real SD cards contain
-      corrupt files.
+    Returns ``None`` if the tag is missing or the file cannot be read; corrupt
+    files are common on field SD cards and must not abort ingestion.
     """
     raise NotImplementedError
 
 
 def build_media(images_dir: Path) -> pd.DataFrame:
-    """One row per image, with the Camtrap DP media columns.
+    """Return one row per image with the Camtrap DP media fields.
 
-    TODO (weeks 5–6): at minimum mediaID, deploymentID (the subfolder name),
-    timestamp, filePath, fileName and fileMediatype.
+    Required columns: ``mediaID``, ``deploymentID`` (subdirectory name),
+    ``timestamp``, ``filePath``, ``fileName``, ``fileMediatype``.
     """
     raise NotImplementedError
 
 
 def build_deployments(media: pd.DataFrame) -> pd.DataFrame:
-    """One row per camera, with deploymentStart and deploymentEnd.
+    """Return one row per deployment with ``deploymentStart`` and ``deploymentEnd``.
 
-    TODO (week 6): group media by deploymentID. Think about whether
-    min and max timestamps are trustworthy if a camera's clock was wrong.
+    Bounds are derived from media timestamps; implausible timestamps (see
+    :mod:`traptools.check`) should not define the deployment period.
     """
     raise NotImplementedError
 
 
 def run(images_dir: Path, out_dir: Path) -> None:
-    """Build both tables and write them as CSV files in out_dir."""
-    raise NotImplementedError("ingest isn't implemented yet. That's your week 5 task!")
+    """Write ``media.csv`` and ``deployments.csv`` to ``out_dir``."""
+    raise NotImplementedError("`ingest` is not implemented yet.")
