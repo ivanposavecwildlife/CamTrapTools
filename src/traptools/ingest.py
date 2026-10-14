@@ -16,6 +16,7 @@ from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
+from PIL import ExifTags, Image
 
 
 def read_timestamp(image_path: Path) -> datetime | None:
@@ -24,7 +25,22 @@ def read_timestamp(image_path: Path) -> datetime | None:
     Returns ``None`` if the tag is missing or the file cannot be read; corrupt
     files are common on field SD cards and must not abort ingestion.
     """
-    raise NotImplementedError
+    try:
+        with Image.open(image_path) as image:
+            exif = image.getexif()
+    except OSError:
+        return None
+
+    value = exif.get_ifd(ExifTags.IFD.Exif).get(ExifTags.Base.DateTimeOriginal)
+    if value is None:
+        value = exif.get(ExifTags.Base.DateTime)
+    if value is None:
+        return None
+
+    try:
+        return datetime.strptime(value, "%Y:%m:%d %H:%M:%S")
+    except ValueError:
+        return None
 
 
 def build_media(images_dir: Path) -> pd.DataFrame:
