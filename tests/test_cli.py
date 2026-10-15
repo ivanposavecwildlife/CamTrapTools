@@ -68,3 +68,24 @@ def test_ingest_command_rejects_incomplete_field_sheet(make_image, tmp_path):
 
     assert result.exit_code == 1
     assert "missing required columns" in result.output
+
+
+def test_check_command_reports_issues_per_deployment(make_image, tmp_path):
+    make_image("images/healthy/IMG_0001.JPG", date_time_original="2024:03:01 06:00:00")
+    make_image("images/reset/IMG_0001.JPG", date_time_original="2000:01:01 00:05:00")
+    runner.invoke(
+        app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")]
+    )
+
+    result = runner.invoke(app, ["check", str(tmp_path / "package")])
+
+    assert result.exit_code == 0
+    assert "healthy: OK" in result.output
+    assert "reset: 1 issue(s)" in result.output
+
+
+def test_check_command_needs_an_ingested_package(tmp_path):
+    result = runner.invoke(app, ["check", str(tmp_path)])
+
+    assert result.exit_code == 1
+    assert "run `camtraptools ingest` first" in result.output

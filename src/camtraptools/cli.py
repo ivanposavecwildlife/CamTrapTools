@@ -59,8 +59,25 @@ def ingest_cmd(
 @app.command("check")
 def check_cmd(
     package: Path = typer.Argument(
-        ..., help="Camtrap DP package folder made by `ingest`."
+        ...,
+        exists=True,
+        file_okay=False,
+        help="Camtrap DP package folder made by `ingest`.",
     ),
 ) -> None:
-    """Write a health report for each camera deployment."""
-    check.run(package)
+    """Check each deployment for camera and data problems."""
+    try:
+        results = check.run(package)
+    except FileNotFoundError:
+        typer.echo(
+            f"Error: no media.csv in {package}; run `camtraptools ingest` first.",
+            err=True,
+        )
+        raise typer.Exit(1)
+    for deployment_id, issues in results.items():
+        if issues:
+            typer.echo(f"{deployment_id}: {len(issues)} issue(s)")
+            for issue in issues:
+                typer.echo(f"  ! {issue}")
+        else:
+            typer.echo(f"{deployment_id}: OK")
