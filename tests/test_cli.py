@@ -101,3 +101,20 @@ def test_check_command_accepts_max_gap_days(make_image, tmp_path):
 
     assert "  OK" in default.output
     assert "no images for 10.0 days" in strict.output
+
+
+def test_report_command_writes_html(make_image, tmp_path):
+    make_image("images/camera_A/IMG_0001.JPG", date_time_original="2024:03:01 06:00:00")
+    runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")])
+
+    result = runner.invoke(app, ["report", str(tmp_path / "package"), "--out", str(tmp_path / "report.html")])
+
+    assert result.exit_code == 0
+    assert (tmp_path / "report.html").exists()
+
+
+def test_report_command_needs_an_ingested_package(tmp_path):
+    result = runner.invoke(app, ["report", str(tmp_path)])
+
+    assert result.exit_code == 1
+    assert "run `camtraptools ingest` first" in result.output

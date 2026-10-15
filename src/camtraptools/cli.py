@@ -5,7 +5,7 @@ from typing import Annotated
 
 import typer
 
-from camtraptools import __version__, check, ingest
+from camtraptools import __version__, check, ingest, report
 
 app = typer.Typer(
     help="CamTrapTools: camera-trap toolkit, from SD card to ecological answers."
@@ -99,3 +99,33 @@ def check_cmd(
                 typer.echo(f"  ! {issue}")
         else:
             typer.echo("  OK")
+
+
+@app.command("report")
+def report_cmd(
+    package: Annotated[
+        Path,
+        typer.Argument(
+            exists=True,
+            file_okay=False,
+            help="Camtrap DP package folder made by `ingest`.",
+        ),
+    ],
+    out: Annotated[Path, typer.Option(help="Where to write the HTML report.")] = Path(
+        "report.html"
+    ),
+    max_gap_days: Annotated[
+        float,
+        typer.Option(help="Report periods longer than this many days without images."),
+    ] = check.MAX_GAP_DAYS,
+) -> None:
+    """Write an HTML health report with a timeline of every deployment."""
+    try:
+        report.run(package, out, max_gap_days)
+    except FileNotFoundError:
+        typer.echo(
+            f"Error: no media.csv in {package}; run `camtraptools ingest` first.",
+            err=True,
+        )
+        raise typer.Exit(1)
+    typer.echo(f"Wrote {out}")
