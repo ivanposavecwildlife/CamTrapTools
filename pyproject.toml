@@ -17,7 +17,10 @@ dependencies = [
 camtraptools = "camtraptools.cli:app"
 
 [dependency-groups]
-dev = ["pytest>=8.3"]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.17.1",
+]
 
 [build-system]
 requires = ["hatchling"]
