@@ -96,14 +96,27 @@ def build_media(images_dir: Path) -> pd.DataFrame:
 
 
 def build_deployments(media: pd.DataFrame) -> pd.DataFrame:
-    """Return one row per deployment with ``deploymentStart`` and ``deploymentEnd``.
+    """Return one row per deployment, spanning its first and last timestamped image."""
+    timestamps = media.groupby("deploymentID")["timestamp"]
+    deployments = pd.DataFrame(
+        {
+            "deploymentStart": timestamps.min(),
+            "deploymentEnd": timestamps.max(),
+        }
+    )
+    return deployments.reset_index()
 
-    Bounds are derived from media timestamps; implausible timestamps (see
-    :mod:`camtraptools.check`) should not define the deployment period.
-    """
-    raise NotImplementedError
+
+TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
 
-def run(images_dir: Path, out_dir: Path) -> None:
-    """Write ``media.csv`` and ``deployments.csv`` to ``out_dir``."""
-    raise NotImplementedError("`ingest` is not implemented yet.")
+def run(images_dir: Path, out_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Build the media and deployments tables and write them as CSV files to ``out_dir``."""
+    media = build_media(images_dir)
+    deployments = build_deployments(media)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    media.to_csv(out_dir / "media.csv", index=False, date_format=TIMESTAMP_FORMAT)
+    deployments.to_csv(
+        out_dir / "deployments.csv", index=False, date_format=TIMESTAMP_FORMAT
+    )
+    return media, deployments

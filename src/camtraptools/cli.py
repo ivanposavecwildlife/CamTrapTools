@@ -6,7 +6,9 @@ import typer
 
 from camtraptools import __version__, check, ingest
 
-app = typer.Typer(help="CamTrapTools: camera-trap toolkit, from SD card to ecological answers.")
+app = typer.Typer(
+    help="CamTrapTools: camera-trap toolkit, from SD card to ecological answers."
+)
 
 
 def _version(show: bool) -> None:
@@ -24,16 +26,27 @@ def main(
 
 @app.command("ingest")
 def ingest_cmd(
-    images: Path = typer.Argument(..., help="Folder of SD-card images, one subfolder per camera."),
-    out: Path = typer.Option(Path("package"), help="Where to write the Camtrap DP package."),
+    images: Path = typer.Argument(
+        ...,
+        exists=True,
+        file_okay=False,
+        help="Folder of SD-card images, one subfolder per camera.",
+    ),
+    out: Path = typer.Option(
+        Path("package"), help="Where to write the Camtrap DP package."
+    ),
 ) -> None:
     """Scan images and build deployments.csv and media.csv."""
-    ingest.run(images, out)
+    media, deployments = ingest.run(images, out)
+    typer.echo(f"Found {len(media)} images from {len(deployments)} deployments.")
+    typer.echo(f"Wrote {out / 'media.csv'} and {out / 'deployments.csv'}")
 
 
 @app.command("check")
 def check_cmd(
-    package: Path = typer.Argument(..., help="Camtrap DP package folder made by `ingest`."),
+    package: Path = typer.Argument(
+        ..., help="Camtrap DP package folder made by `ingest`."
+    ),
 ) -> None:
     """Write a health report for each camera deployment."""
     check.run(package)
