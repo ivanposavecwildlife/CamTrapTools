@@ -1,6 +1,6 @@
 [project]
 name = "CamTrapTools"
-version = "0.0.1"
+version = "0.1.0"
 description = "Open-source toolkit for camera-trap projects: from SD card to ecological answers."
 readme = "README.md"
 license = "MIT"

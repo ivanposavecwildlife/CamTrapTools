@@ -2,27 +2,100 @@
 
 **Open-source toolkit for camera-trap projects: from SD card to ecological answers.**
 
-![status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange)
+[![CI](https://github.com/ivanposavecwildlife/CamTrapTools/actions/workflows/ci.yml/badge.svg)](https://github.com/ivanposavecwildlife/CamTrapTools/actions/workflows/ci.yml)
+![status: alpha](https://img.shields.io/badge/status-alpha-orange)
+![python: 3.11–3.14](https://img.shields.io/badge/python-3.11%E2%80%933.14-blue)
 ![license: MIT](https://img.shields.io/badge/license-MIT-blue)
-![python: 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
 
-## Why
+Camera traps are one of the main ways conservationists monitor wildlife, but a single
+project can produce millions of images. Field teams routinely lose months of data to
+cameras that died, fell over or had their clock reset, and nobody notices until the
+analysis is already wrong.
 
-Camera traps are one of the main ways conservationists monitor wildlife, but a
-single project can produce millions of images. Field teams routinely:
+CamTrapTools turns a folder of SD-card images into a standard
+[Camtrap DP](https://camtrap-dp.tdwg.org) data package, checks every camera for problems
+and produces a report a field team can act on.
 
-- lose months of data to broken, moved or misconfigured cameras that nobody noticed
-- spend most of their review time on empty images
-- have no efficient way to check AI predictions
-- can't tell whether AI models actually work on *their* cameras and species
-- struggle to turn detections into ecological results and share the data openly
+![Camera health report showing a timeline per camera with highlighted gaps](docs/report.png)
 
-CamTrapTools covers the whole workflow in one place. Every module reads and writes a
-[Camtrap DP](https://camtrap-dp.tdwg.org) package, the open standard for camera-trap
-data, so results can be published directly to [GBIF](https://www.gbif.org) and used
-with other tools.
+*Health report for eight simulated cameras: a dead battery (`cam_dead`), a camera knocked
+over for a month (`cam_gap`), wind-triggered images (`cam_vegetation`), a broken infrared
+flash (`cam_noflash`) and clock errors.*
 
-## Workflow
+## Features
+
+- **`ingest`**: scans SD-card folders (one per camera), reads capture times from EXIF and
+  writes `media.csv` and `deployments.csv` in Camtrap DP format. An optional CSV or Excel
+  **field sheet** adds coordinates, camera details and the recorded setup and pickup times.
+- **Field-sheet validation**: duplicate IDs, impossible coordinates, unreadable dates and
+  camera names that don't match their folders, with suggestions such as
+  *"did you mean 'camera-B'?"*
+- **`check`**: reports camera problems for each deployment:
+
+  | Problem | How it is detected |
+  |---|---|
+  | Clock reset or set wrongly | images dated before 2010 or in the future; time going backwards between consecutive files |
+  | Dead battery or full card | no images in the last 21+ days before pickup |
+  | Camera knocked over or covered | no images for 21+ days mid-deployment (adjustable with `--max-gap-days`) |
+  | Vegetation or sun glare | more than 100 images in one day |
+  | Broken infrared flash | no night images out of 50 or more |
+  | Wrong setup date on the field sheet | no images in the first 21+ days (`ingest` also reports images taken before the recorded start) |
+
+- **`report`**: a single self-contained HTML page with headline numbers, an interactive
+  timeline, a summary table and all issues. It works offline, supports dark mode and can
+  be emailed as one file.
+
+## Quick start
+
+Requires [uv](https://docs.astral.sh/uv/).
+
+```bash
+uv tool install git+https://github.com/ivanposavecwildlife/CamTrapTools
+```
+
+```bash
+camtraptools ingest sd_cards --out my_project --field-sheet field_sheet.xlsx
+camtraptools check my_project
+camtraptools report my_project --out report.html
+```
+
+### Input layout
+
+One folder per camera deployment; images can be nested at any depth (e.g. `DCIM/100MEDIA`).
+
+```
+sd_cards/
+├── camera_A/DCIM/100MEDIA/IMG_0001.JPG …
+└── camera_B/DCIM/100MEDIA/IMG_0001.JPG …
+```
+
+### Field sheet (optional)
+
+A CSV or Excel file with one row per deployment. Column names follow Camtrap DP.
+
+| Column | Required | Example |
+|---|---|---|
+| `deploymentID` | yes, matches the folder name | `camera_A` |
+| `latitude`, `longitude` | yes | `52.7031`, `23.8452` |
+| `deploymentStart`, `deploymentEnd` | recommended | `2024-05-01T09:15`, `2024-06-30` |
+| any other Camtrap DP column | no | `locationName`, `cameraModel`, `cameraHeight`, `deploymentComments` |
+
+Recorded start and end times take priority over the first and last image, which usually
+underestimate how long a camera was running.
+
+## Validated on real data
+
+Tested on four deployments from
+[Snapshot Kgalagadi](https://lila.science/datasets/snapshot-kgalagadi/) (LILA BC):
+
+- EXIF timestamps matched the published capture times **76 of 76** times.
+- Without field-sheet dates, deployment periods inferred from images were **10–16% too
+  short**, because setup photos had been removed for privacy. This is why recorded periods
+  take priority.
+- The default thresholds raise **no false alarms** on these desert cameras, where
+  10–19 days without an animal is normal.
+
+## Roadmap
 
 ```
 SD card ─► ingest/check ─► detect/events ─► review ─► ecology ─► GBIF
@@ -32,36 +105,26 @@ SD card ─► ingest/check ─► detect/events ─► review ─► ecology �
 
 | Module | Commands | Purpose | Status |
 |---|---|---|---|
-| Ingest & QA | `ingest`, `check` | Build the data package; detect clock errors, outages and false-trigger problems | In development |
-| Detection | `detect`, `events`, `import` | MegaDetector and SpeciesNet inference, grouping photos into independent events, importing existing outputs | Planned |
+| Ingest & QA | `ingest`, `check`, `report` | Build the data package, find camera problems, report them | ✅ v0.1.0 |
+| Detection | `detect`, `events`, `import` | MegaDetector and SpeciesNet inference, grouping images into independent events, importing existing outputs | Planned |
 | Review | `review` | Local web app for checking AI labels, least confident first | Planned |
 | Evaluation | `evaluate`, `adapt` | Per-species accuracy and confidence thresholds; regional fine-tuning | Planned |
 | Ecology | `ecology` | Occupancy and activity analysis, and how sensitive results are to AI errors | Planned |
 
-## Installation
-
-Requires [uv](https://docs.astral.sh/uv/).
+## Development
 
 ```bash
 git clone https://github.com/ivanposavecwildlife/CamTrapTools
 cd CamTrapTools
 uv sync
-uv run camtraptools --help
-```
-
-## Usage
-
-```bash
-uv run camtraptools ingest path/to/images --out my_project
-uv run camtraptools check my_project
-```
-
-## Development
-
-```bash
+uv run ruff check src tests
 uv run pytest
 ```
 
+CI runs the linter and tests on Python 3.11–3.14 (Linux) and on Windows and macOS.
+
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). Snapshot Kgalagadi data used for validation is published by
+[Snapshot Safari](https://lila.science/datasets/snapshot-kgalagadi/) under the
+Community Data License Agreement (permissive) and is not included in this repository.
