@@ -115,7 +115,7 @@ def run(
     images_dir: Path, out_dir: Path, field_sheet: Path | None = None
 ) -> tuple[pd.DataFrame, pd.DataFrame, list[str]]:
     """Build the media and deployments tables, merge the optional field sheet,
-    and write the tables as CSV files to ``out_dir``.
+    check it, and write the tables as CSV files to ``out_dir``.
 
     Returns the two tables and a list of field-sheet issues.
     """
@@ -123,9 +123,10 @@ def run(
     deployments = build_deployments(media)
     issues = []
     if field_sheet is not None:
-        sheet = read_field_sheet(field_sheet)
+        sheet = parse_recorded_periods(read_field_sheet(field_sheet))
         issues += check_field_sheet(sheet)
         issues += match_deployments(sheet, media)
+        issues += check_recorded_periods(sheet, media)
         deployments = add_field_sheet(deployments, sheet)
     out_dir.mkdir(parents=True, exist_ok=True)
     media.to_csv(out_dir / "media.csv", index=False, date_format=TIMESTAMP_FORMAT)
@@ -206,6 +207,74 @@ def match_deployments(sheet: pd.DataFrame, media: pd.DataFrame) -> list[str]:
 
 
 def add_field_sheet(deployments: pd.DataFrame, sheet: pd.DataFrame) -> pd.DataFrame:
-    """Add the field sheet's columns (coordinates, camera details, notes) to each deployment."""
+    """Add the field sheet's columns (coordinates, camera details, notes) to each deployment.
+
+    Recorded ``deploymentStart`` and ``deploymentEnd`` values take priority over
+    the dates of the first and last image.
+    """
     sheet = sheet.drop_duplicates("deploymentID")
-    return deployments.merge(sheet, on="deploymentID", how="left")
+    merged = deployments.merge(
+        sheet, on="deploymentID", how="left", suffixes=("", "_recorded")
+    )
+    for column in ["deploymentStart", "deploymentEnd"]:
+        recorded = f"{column}_recorded"
+        if recorded in merged.columns:
+            merged[column] = merged[recorded].fillna(merged[column])
+            merged = merged.drop(columns=recorded)
+    return merged
+
+
+def parse_recorded_periods(sheet: pd.DataFrame) -> pd.DataFrame:
+    """Convert the field sheet's optional ``deploymentStart`` and ``deploymentEnd``
+    columns (ISO 8601, e.g. ``2024-05-01`` or ``2024-05-01T09:15``) to dates.
+    An end date without a time means the end of that day."""
+    if "deploymentStart" in sheet.columns:
+        sheet["deploymentStart"] = pd.to_datetime(
+            sheet["deploymentStart"], format="ISO8601", errors="coerce"
+        )
+    if "deploymentEnd" in sheet.columns:
+        end = pd.to_datetime(sheet["deploymentEnd"], format="ISO8601", errors="coerce")
+        date_only = end == end.dt.normalize()
+        end[date_only] = end[date_only] + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+        sheet["deploymentEnd"] = end
+    return sheet
+
+
+def check_recorded_periods(sheet: pd.DataFrame, media: pd.DataFrame) -> list[str]:
+    """Return problems with recorded deployment periods: missing or unreadable dates,
+    a start after its end, and images taken outside the recorded period."""
+    issues = []
+    if "deploymentStart" not in sheet.columns or "deploymentEnd" not in sheet.columns:
+        return issues
+    periods = sheet.drop_duplicates("deploymentID").set_index("deploymentID")
+    for row in periods.itertuples():
+        if pd.isna(row.deploymentStart):
+            issues.append(
+                f"{row.Index}: no readable recorded start; using the first image instead"
+            )
+        if pd.isna(row.deploymentEnd):
+            issues.append(
+                f"{row.Index}: no readable recorded end; using the last image instead"
+            )
+        if row.deploymentStart > row.deploymentEnd:
+            issues.append(f"{row.Index}: recorded start is after the recorded end")
+    images = media.join(
+        periods[["deploymentStart", "deploymentEnd"]], on="deploymentID", how="inner"
+    )
+    before = (
+        images[images["timestamp"] < images["deploymentStart"]]
+        .groupby("deploymentID")
+        .size()
+    )
+    after = (
+        images[images["timestamp"] > images["deploymentEnd"]]
+        .groupby("deploymentID")
+        .size()
+    )
+    for deployment_id, count in before.items():
+        issues.append(
+            f"{deployment_id}: {count} image(s) taken before the recorded start"
+        )
+    for deployment_id, count in after.items():
+        issues.append(f"{deployment_id}: {count} image(s) taken after the recorded end")
+    return issues
