@@ -1,6 +1,7 @@
 """Command-line interface. Each module of the toolkit is one subcommand."""
 
 from pathlib import Path
+from typing import Annotated
 
 import typer
 
@@ -19,28 +20,22 @@ def _version(show: bool) -> None:
 
 @app.callback()
 def main(
-    version: bool = typer.Option(False, "--version", callback=_version, is_eager=True),
+    version: Annotated[bool, typer.Option("--version", callback=_version, is_eager=True)] = False,
 ) -> None:
     pass
 
 
 @app.command("ingest")
 def ingest_cmd(
-    images: Path = typer.Argument(
-        ...,
-        exists=True,
-        file_okay=False,
-        help="Folder of SD-card images, one subfolder per camera.",
-    ),
-    out: Path = typer.Option(
-        Path("package"), help="Where to write the Camtrap DP package."
-    ),
-    field_sheet: Path | None = typer.Option(
-        None,
-        exists=True,
-        dir_okay=False,
-        help="CSV or Excel field sheet with coordinates and camera details.",
-    ),
+    images: Annotated[
+        Path,
+        typer.Argument(exists=True, file_okay=False, help="Folder of SD-card images, one subfolder per camera."),
+    ],
+    out: Annotated[Path, typer.Option(help="Where to write the Camtrap DP package.")] = Path("package"),
+    field_sheet: Annotated[
+        Path | None,
+        typer.Option(exists=True, dir_okay=False, help="CSV or Excel field sheet with coordinates and camera details."),
+    ] = None,
 ) -> None:
     """Scan images and build deployments.csv and media.csv."""
     try:
@@ -58,12 +53,10 @@ def ingest_cmd(
 
 @app.command("check")
 def check_cmd(
-    package: Path = typer.Argument(
-        ...,
-        exists=True,
-        file_okay=False,
-        help="Camtrap DP package folder made by `ingest`.",
-    ),
+    package: Annotated[
+        Path,
+        typer.Argument(exists=True, file_okay=False, help="Camtrap DP package folder made by `ingest`."),
+    ],
 ) -> None:
     """Check each deployment for camera and data problems."""
     try:
