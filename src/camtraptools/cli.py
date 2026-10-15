@@ -20,7 +20,9 @@ def _version(show: bool) -> None:
 
 @app.callback()
 def main(
-    version: Annotated[bool, typer.Option("--version", callback=_version, is_eager=True)] = False,
+    version: Annotated[
+        bool, typer.Option("--version", callback=_version, is_eager=True)
+    ] = False,
 ) -> None:
     pass
 
@@ -29,12 +31,22 @@ def main(
 def ingest_cmd(
     images: Annotated[
         Path,
-        typer.Argument(exists=True, file_okay=False, help="Folder of SD-card images, one subfolder per camera."),
+        typer.Argument(
+            exists=True,
+            file_okay=False,
+            help="Folder of SD-card images, one subfolder per camera.",
+        ),
     ],
-    out: Annotated[Path, typer.Option(help="Where to write the Camtrap DP package.")] = Path("package"),
+    out: Annotated[
+        Path, typer.Option(help="Where to write the Camtrap DP package.")
+    ] = Path("package"),
     field_sheet: Annotated[
         Path | None,
-        typer.Option(exists=True, dir_okay=False, help="CSV or Excel field sheet with coordinates and camera details."),
+        typer.Option(
+            exists=True,
+            dir_okay=False,
+            help="CSV or Excel field sheet with coordinates and camera details.",
+        ),
     ] = None,
 ) -> None:
     """Scan images and build deployments.csv and media.csv."""
@@ -55,12 +67,21 @@ def ingest_cmd(
 def check_cmd(
     package: Annotated[
         Path,
-        typer.Argument(exists=True, file_okay=False, help="Camtrap DP package folder made by `ingest`."),
+        typer.Argument(
+            exists=True,
+            file_okay=False,
+            help="Camtrap DP package folder made by `ingest`.",
+        ),
     ],
+    max_gap_days: Annotated[
+        float,
+        typer.Option(help="Report periods longer than this many days without images."),
+    ] = check.MAX_GAP_DAYS,
 ) -> None:
     """Check each deployment for camera and data problems."""
     try:
-        results = check.run(package)
+        results = check.run(package, max_gap_days)
+        summary = check.summarize(package)
     except FileNotFoundError:
         typer.echo(
             f"Error: no media.csv in {package}; run `camtraptools ingest` first.",
@@ -68,9 +89,13 @@ def check_cmd(
         )
         raise typer.Exit(1)
     for deployment_id, issues in results.items():
+        numbers = summary.loc[deployment_id]
+        typer.echo(
+            f"{deployment_id}: {numbers['days']} days, {int(numbers['images'])} images, "
+            f"longest gap {numbers['longestGapDays']} days"
+        )
         if issues:
-            typer.echo(f"{deployment_id}: {len(issues)} issue(s)")
             for issue in issues:
                 typer.echo(f"  ! {issue}")
         else:
-            typer.echo(f"{deployment_id}: OK")
+            typer.echo("  OK")

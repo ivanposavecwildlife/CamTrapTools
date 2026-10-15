@@ -80,8 +80,8 @@ def test_check_command_reports_issues_per_deployment(make_image, tmp_path):
     result = runner.invoke(app, ["check", str(tmp_path / "package")])
 
     assert result.exit_code == 0
-    assert "healthy: OK" in result.output
-    assert "reset: 1 issue(s)" in result.output
+    assert "healthy: 0.0 days, 1 images, longest gap 0.0 days\n  OK" in result.output
+    assert "! 1 image(s) dated before 2010" in result.output
 
 
 def test_check_command_needs_an_ingested_package(tmp_path):
@@ -89,3 +89,15 @@ def test_check_command_needs_an_ingested_package(tmp_path):
 
     assert result.exit_code == 1
     assert "run `camtraptools ingest` first" in result.output
+
+
+def test_check_command_accepts_max_gap_days(make_image, tmp_path):
+    make_image("images/camera_A/IMG_0001.JPG", date_time_original="2024:03:01 06:00:00")
+    make_image("images/camera_A/IMG_0002.JPG", date_time_original="2024:03:11 06:00:00")
+    runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")])
+
+    default = runner.invoke(app, ["check", str(tmp_path / "package")])
+    strict = runner.invoke(app, ["check", str(tmp_path / "package"), "--max-gap-days", "7"])
+
+    assert "  OK" in default.output
+    assert "no images for 10.0 days" in strict.output
