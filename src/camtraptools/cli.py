@@ -35,10 +35,24 @@ def ingest_cmd(
     out: Path = typer.Option(
         Path("package"), help="Where to write the Camtrap DP package."
     ),
+    field_sheet: Path | None = typer.Option(
+        None,
+        exists=True,
+        dir_okay=False,
+        help="CSV or Excel field sheet with coordinates and camera details.",
+    ),
 ) -> None:
     """Scan images and build deployments.csv and media.csv."""
-    media, deployments = ingest.run(images, out)
+    try:
+        media, deployments, issues = ingest.run(images, out, field_sheet)
+    except ValueError as error:
+        typer.echo(f"Error: {error}", err=True)
+        raise typer.Exit(1)
     typer.echo(f"Found {len(media)} images from {len(deployments)} deployments.")
+    if issues:
+        typer.echo(f"{len(issues)} field-sheet issue(s):")
+        for issue in issues:
+            typer.echo(f"  ! {issue}")
     typer.echo(f"Wrote {out / 'media.csv'} and {out / 'deployments.csv'}")
 
 

@@ -12,6 +12,7 @@ Expected input layout, one subdirectory per deployment:
             ...
 """
 
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -110,13 +111,101 @@ def build_deployments(media: pd.DataFrame) -> pd.DataFrame:
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
 
-def run(images_dir: Path, out_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Build the media and deployments tables and write them as CSV files to ``out_dir``."""
+def run(
+    images_dir: Path, out_dir: Path, field_sheet: Path | None = None
+) -> tuple[pd.DataFrame, pd.DataFrame, list[str]]:
+    """Build the media and deployments tables, merge the optional field sheet,
+    and write the tables as CSV files to ``out_dir``.
+
+    Returns the two tables and a list of field-sheet issues.
+    """
     media = build_media(images_dir)
     deployments = build_deployments(media)
+    issues = []
+    if field_sheet is not None:
+        sheet = read_field_sheet(field_sheet)
+        issues += check_field_sheet(sheet)
+        issues += match_deployments(sheet, media)
+        deployments = add_field_sheet(deployments, sheet)
     out_dir.mkdir(parents=True, exist_ok=True)
     media.to_csv(out_dir / "media.csv", index=False, date_format=TIMESTAMP_FORMAT)
     deployments.to_csv(
         out_dir / "deployments.csv", index=False, date_format=TIMESTAMP_FORMAT
     )
-    return media, deployments
+    return media, deployments, issues
+
+
+REQUIRED_FIELD_SHEET_COLUMNS = ["deploymentID", "latitude", "longitude"]
+
+
+def read_field_sheet(path: Path) -> pd.DataFrame:
+    """Read a field sheet (CSV or Excel) with one row per deployment."""
+    if path.suffix.lower() == ".xlsx":
+        sheet = pd.read_excel(path)
+    else:
+        sheet = pd.read_csv(path)
+    sheet.columns = sheet.columns.str.strip()
+    missing = [
+        column for column in REQUIRED_FIELD_SHEET_COLUMNS if column not in sheet.columns
+    ]
+    if missing:
+        raise ValueError(
+            f"Field sheet is missing required columns: {', '.join(missing)}"
+        )
+    sheet["deploymentID"] = sheet["deploymentID"].astype(str).str.strip()
+    sheet["latitude"] = pd.to_numeric(sheet["latitude"], errors="coerce")
+    sheet["longitude"] = pd.to_numeric(sheet["longitude"], errors="coerce")
+    return sheet
+
+
+def check_field_sheet(sheet: pd.DataFrame) -> list[str]:
+    """Return problems in the field sheet itself: duplicate IDs and invalid coordinates."""
+    issues = []
+    duplicates = sheet.loc[sheet["deploymentID"].duplicated(), "deploymentID"]
+    for deployment_id in sorted(set(duplicates)):
+        issues.append(f"{deployment_id}: listed more than once in the field sheet")
+    for row in sheet.itertuples():
+        if pd.isna(row.latitude) or pd.isna(row.longitude):
+            issues.append(f"{row.deploymentID}: missing or unreadable coordinates")
+        elif not (-90 <= row.latitude <= 90 and -180 <= row.longitude <= 180):
+            issues.append(
+                f"{row.deploymentID}: impossible coordinates ({row.latitude}, {row.longitude})"
+            )
+    return issues
+
+
+def normalize_id(deployment_id: str) -> str:
+    """Reduce an ID to lowercase letters and numbers without leading zeros,
+    so that ``CAM_03``, ``cam-3`` and ``Cam3`` all become ``cam3``."""
+    parts = re.findall(r"[a-z]+|[0-9]+", deployment_id.lower())
+    normalized = []
+    for part in parts:
+        if part.isdigit():
+            part = str(int(part))
+        normalized.append(part)
+    return "".join(normalized)
+
+
+def match_deployments(sheet: pd.DataFrame, media: pd.DataFrame) -> list[str]:
+    """Return mismatches between field-sheet deployment IDs and image folders."""
+    issues = []
+    sheet_ids = set(sheet["deploymentID"])
+    folder_ids = set(media["deploymentID"])
+    sheet_ids_by_normalized = {
+        normalize_id(sheet_id): sheet_id for sheet_id in sheet_ids
+    }
+    for deployment_id in sorted(folder_ids - sheet_ids):
+        match = sheet_ids_by_normalized.get(normalize_id(deployment_id))
+        hint = f" (did you mean '{match}'?)" if match else ""
+        issues.append(
+            f"{deployment_id}: has images but is not in the field sheet{hint}"
+        )
+    for deployment_id in sorted(sheet_ids - folder_ids):
+        issues.append(f"{deployment_id}: in the field sheet but has no images")
+    return issues
+
+
+def add_field_sheet(deployments: pd.DataFrame, sheet: pd.DataFrame) -> pd.DataFrame:
+    """Add the field sheet's columns (coordinates, camera details, notes) to each deployment."""
+    sheet = sheet.drop_duplicates("deploymentID")
+    return deployments.merge(sheet, on="deploymentID", how="left")
