@@ -15,11 +15,11 @@ analysis is already wrong.
 CamTrapTools turns a folder of SD-card images into a standard
 [Camtrap DP](https://camtrap-dp.tdwg.org) data package, checks every camera for problems,
 finds and identifies animals with [SpeciesNet](https://github.com/google/cameratrapai),
-counts independent visits, and exports a validated package ready to publish on
-[GBIF](https://www.gbif.org).
+counts independent visits, lets a person review the AI's least confident decisions
+first, and exports a validated package ready to publish on [GBIF](https://www.gbif.org).
 
 ```
-SD cards ─► ingest ─► check / report ─► detect (or import) ─► events ─► export ─► GBIF
+SD cards ─► ingest ─► check / report ─► detect (or import) ─► events ─► review ─► export ─► GBIF
 ```
 
 ![Camera health report showing a timeline per camera with highlighted gaps](docs/report.png)
@@ -62,8 +62,18 @@ flash (`cam_noflash`) and clock errors.*
 - **`import`**: reads results from MegaDetector, AddaxAI, Timelapse or SpeciesNet, even
   when their image paths are relative to a different folder, so teams can adopt
   CamTrapTools mid-project without re-running the AI.
+- **`review`**: a local web app for checking the AI event by event, **least confident
+  first**. Each page shows the images with bounding boxes, the AI's decision and
+  confidence, and a form pre-filled with that decision: press Enter to accept, `B` for
+  blank, or correct the species and count. Decisions are saved as human observations
+  next to the machine's, and `review-stats` reports agreement with the AI, corrections
+  by confidence and review speed.
+
+  ![Review app showing a camera event with the AI's boxes and a human correction](docs/review.jpg)
+
 - **`export`**: writes a complete Camtrap DP 1.0.2 package (`datapackage.json` and three
-  tables) with time zones, coverage, contributors and licenses. Exported packages pass
+  tables) with time zones, coverage, contributors and licenses, using the reviewer's
+  decision wherever an event was reviewed. Exported packages pass
   [Frictionless](https://framework.frictionlessdata.io/) validation against the official
   Camtrap DP profile.
 
@@ -82,6 +92,8 @@ camtraptools check my_project
 camtraptools report my_project --out report.html
 camtraptools detect my_project --images sd_cards --country ZAF
 camtraptools events my_project
+camtraptools review my_project --images sd_cards --reviewer "Your Name"
+camtraptools review-stats my_project
 camtraptools export my_project --out publish --title "My survey" \
     --contributor "Your Name" --timezone Africa/Johannesburg
 ```
@@ -132,6 +144,9 @@ Tested on four deployments from
   monkey with 94% confidence, a reminder that confidence is not accuracy.
 - **194 images became 60 independent events**; at one camera, 64 gemsbok images were
   11 separate visits.
+- Ordering events by AI confidence put **all 12 events the AI did not get exactly right
+  among the first 13 of 60**; the remaining 47 were all correct. Reviewing the least
+  confident 22% of events would have caught every mistake.
 - Results imported from LILA's published MegaDetector run matched the toolkit's own
   detections, and every exported package passes Camtrap DP validation.
 
@@ -147,7 +162,7 @@ SD card ─► ingest/check ─► detect/events ─► review ─► ecology �
 |---|---|---|---|
 | Ingest & QA | `ingest`, `check`, `report` | Build the data package, find camera problems, report them | ✅ v0.1.0 |
 | Detection | `detect`, `events`, `import`, `export` | SpeciesNet detection and species identification, independent events, importing other tools' results, validated Camtrap DP export | ✅ v0.2.0 |
-| Review | `review` | Local web app for checking AI labels, least confident first | Planned |
+| Review | `review`, `review-stats` | Local web app for checking AI labels, least confident first; review statistics | ✅ v0.3.0 |
 | Evaluation | `evaluate`, `adapt` | Per-species accuracy and confidence thresholds; regional fine-tuning | Planned |
 | Ecology | `ecology` | Occupancy and activity analysis, and how sensitive results are to AI errors | Planned |
 
