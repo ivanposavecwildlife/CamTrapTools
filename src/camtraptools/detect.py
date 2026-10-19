@@ -88,3 +88,108 @@ def summarize_detections(
     summary = images.groupby("deploymentID")[[*CATEGORIES, "empty"]].sum()
     summary.insert(0, "images", images.groupby("deploymentID").size())
     return summary
+
+
+OBSERVATIONS_FILE = "observations.csv"
+OBSERVATION_COLUMNS = [
+    "observationID",
+    "deploymentID",
+    "mediaID",
+    "eventID",
+    "eventStart",
+    "eventEnd",
+    "observationLevel",
+    "observationType",
+    "cameraSetupType",
+    "scientificName",
+    "count",
+    "lifeStage",
+    "sex",
+    "behavior",
+    "individualID",
+    "individualPositionRadius",
+    "individualPositionAngle",
+    "individualSpeed",
+    "bboxX",
+    "bboxY",
+    "bboxWidth",
+    "bboxHeight",
+    "classificationMethod",
+    "classifiedBy",
+    "classificationTimestamp",
+    "classificationProbability",
+    "observationTags",
+    "observationComments",
+]
+OBSERVATION_TYPES = {"animal": "animal", "person": "human", "vehicle": "vehicle"}
+
+
+def has_results(results_file: Path, model: str) -> bool:
+    """Return True if ``results_file`` exists and was made with ``model``."""
+    if not results_file.exists():
+        return False
+    results = json.loads(results_file.read_text(encoding="utf-8"))
+    return results.get("info", {}).get("detector") == model
+
+
+def build_observations(
+    media: pd.DataFrame, results_file: Path, threshold: float
+) -> pd.DataFrame:
+    """Return Camtrap DP media-level observations: one per detection at or above
+    ``threshold``, one "blank" per image without any, and one "unclassified" per
+    image MegaDetector could not process."""
+    info = json.loads(results_file.read_text(encoding="utf-8")).get("info", {})
+    version = info.get("detector_metadata", {}).get("megadetector_version") or info.get(
+        "detector", ""
+    )
+    classified_at = info.get("detection_completion_time")
+    if classified_at:
+        classified_at = pd.Timestamp(classified_at).strftime("%Y-%m-%dT%H:%M:%S")
+    detections = load_detections(results_file)
+    confident = detections[detections["conf"] >= threshold]
+    detections_by_image = dict(list(confident.groupby("filePath")))
+    failed = set(failed_images(results_file))
+    rows = []
+    for image in media.itertuples():
+        base = {
+            "deploymentID": image.deploymentID,
+            "mediaID": image.mediaID,
+            "eventStart": image.timestamp,
+            "eventEnd": image.timestamp,
+            "observationLevel": "media",
+            "classificationMethod": "machine",
+            "classifiedBy": f"MegaDetector {version}".strip(),
+            "classificationTimestamp": classified_at,
+        }
+        if image.filePath in failed:
+            rows.append({**base, "observationType": "unclassified"})
+        elif image.filePath in detections_by_image:
+            for detection in detections_by_image[image.filePath].itertuples():
+                rows.append(
+                    {
+                        **base,
+                        "observationType": OBSERVATION_TYPES[detection.category],
+                        "count": 1,
+                        "bboxX": detection.x,
+                        "bboxY": detection.y,
+                        "bboxWidth": detection.width,
+                        "bboxHeight": detection.height,
+                        "classificationProbability": detection.conf,
+                    }
+                )
+        else:
+            rows.append({**base, "observationType": "blank"})
+    observations = pd.DataFrame(rows, columns=OBSERVATION_COLUMNS)
+    observations["observationID"] = [
+        f"obs{number:06d}" for number in range(1, len(observations) + 1)
+    ]
+    observations["count"] = observations["count"].astype("Int64")
+    return observations
+
+
+def write_observations(package_dir: Path, threshold: float = DEFAULT_THRESHOLD) -> pd.DataFrame:
+    """Write ``observations.csv`` to the package from its MegaDetector results."""
+    media = pd.read_csv(package_dir / "media.csv", dtype={"timestamp": str})
+    observations = build_observations(media, package_dir / RESULTS_FILE, threshold)
+    observations.to_csv(package_dir / OBSERVATIONS_FILE, index=False)
+    return observations

@@ -153,3 +153,81 @@ def test_run_processes_exactly_the_ingested_images(make_image, monkeypatch, tmp_
     assert calls["image_files"] == [str(tmp_path / "images/camera_A/DCIM/IMG_0001.JPG")]
     assert results_file == tmp_path / "package/megadetector.json"
     assert detect.failed_images(results_file) == []
+
+
+def make_media():
+    return pd.DataFrame(
+        {
+            "mediaID": [image["file"] for image in RESULTS["images"]],
+            "deploymentID": ["camera_A", "camera_A", "camera_B", "camera_B"],
+            "timestamp": [
+                "2024-03-01T06:00:00",
+                "2024-03-01T07:00:00",
+                "2024-03-02T06:00:00",
+                None,
+            ],
+            "filePath": [image["file"] for image in RESULTS["images"]],
+        }
+    )
+
+
+def test_has_results_checks_file_and_model(results_file, tmp_path):
+    assert detect.has_results(results_file, "MDV5A")
+    assert not detect.has_results(results_file, "MDV1000-REDWOOD")
+    assert not detect.has_results(tmp_path / "missing.json", "MDV5A")
+
+
+def test_build_observations_follows_camtrap_dp(results_file):
+    observations = detect.build_observations(make_media(), results_file, threshold=0.2)
+
+    assert list(observations.columns) == detect.OBSERVATION_COLUMNS
+    assert list(observations["observationType"]) == [
+        "animal",
+        "human",
+        "blank",
+        "unclassified",
+    ]
+    assert list(observations["observationID"]) == [
+        "obs000001",
+        "obs000002",
+        "obs000003",
+        "obs000004",
+    ]
+    assert set(observations["observationLevel"]) == {"media"}
+    assert set(observations["classificationMethod"]) == {"machine"}
+
+
+def test_build_observations_copies_box_and_confidence(results_file):
+    animal = detect.build_observations(make_media(), results_file, threshold=0.2).iloc[
+        0
+    ]
+
+    assert animal["mediaID"] == "camera_A/IMG_0001.JPG"
+    assert animal["eventStart"] == animal["eventEnd"] == "2024-03-01T06:00:00"
+    assert (
+        animal["bboxX"],
+        animal["bboxY"],
+        animal["bboxWidth"],
+        animal["bboxHeight"],
+    ) == (0.1, 0.2, 0.3, 0.4)
+    assert animal["classificationProbability"] == 0.98
+    assert animal["count"] == 1
+    assert animal["classifiedBy"] == "MegaDetector MDV5A"
+
+
+def test_build_observations_keeps_every_confident_detection(results_file):
+    observations = detect.build_observations(make_media(), results_file, threshold=0.01)
+
+    image_2 = observations[observations["mediaID"] == "camera_A/IMG_0002.JPG"]
+    assert list(image_2["observationType"]) == ["human", "animal"]
+
+
+def test_write_observations_creates_csv(results_file):
+    package = results_file.parent
+    make_media().to_csv(package / "media.csv", index=False)
+
+    detect.write_observations(package, threshold=0.2)
+
+    lines = (package / "observations.csv").read_text(encoding="utf-8").splitlines()
+    assert lines[0].split(",") == detect.OBSERVATION_COLUMNS
+    assert lines[1].split(",")[10] == "1"

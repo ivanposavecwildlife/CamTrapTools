@@ -13,6 +13,12 @@ All notable changes to this project are documented here. The format follows
   MegaDetector batch format, and summarizes images with animals, people, vehicles or
   nothing per deployment (`--threshold`, default 0.2). Requires the optional `detect`
   extra; MegaDetector's inference code is GPL-licensed.
+- `detect` writes `observations.csv` with Camtrap DP media-level observations: one per
+  detection at or above the threshold (with bounding box, confidence and the model
+  version as `classifiedBy`), `blank` for images without detections and `unclassified`
+  for images MegaDetector could not read.
+- `detect` reuses existing results for the same model, so trying another `--threshold`
+  is instant; `--rerun` runs MegaDetector again and `--images` is only needed when it runs.
 
 ## [0.1.0] - 2026-10-15
 

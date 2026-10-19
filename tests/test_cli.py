@@ -162,7 +162,7 @@ def test_detect_command_summarizes_results(make_image, monkeypatch, tmp_path):
 
     assert result.exit_code == 0
     assert "camera_A" in result.output
-    assert "megadetector.json" in result.output
+    assert "observations.csv (1 observations)" in result.output
 
 
 def test_detect_command_explains_missing_extra(make_image, monkeypatch, tmp_path):
@@ -178,3 +178,43 @@ def test_detect_command_explains_missing_extra(make_image, monkeypatch, tmp_path
 
     assert result.exit_code == 1
     assert "uv sync --extra detect" in result.output
+
+
+def test_detect_command_reuses_existing_results(make_image, tmp_path):
+    make_image("images/camera_A/IMG_0001.JPG", date_time_original="2024:03:01 06:00:00")
+    runner.invoke(
+        app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")]
+    )
+    results = {
+        "images": [
+            {
+                "file": "camera_A/IMG_0001.JPG",
+                "detections": [{"category": "1", "conf": 0.3, "bbox": [0, 0, 1, 1]}],
+            }
+        ],
+        "detection_categories": {"1": "animal", "2": "person", "3": "vehicle"},
+        "info": {"detector": "MDV5A"},
+    }
+    (tmp_path / "package/megadetector.json").write_text(
+        json.dumps(results), encoding="utf-8"
+    )
+
+    result = runner.invoke(
+        app, ["detect", str(tmp_path / "package"), "--threshold", "0.5"]
+    )
+
+    assert result.exit_code == 0
+    assert "Using existing MDV5A results" in result.output
+    assert "observations.csv (1 observations)" in result.output
+
+
+def test_detect_command_needs_images_to_run(make_image, tmp_path):
+    make_image("images/camera_A/IMG_0001.JPG")
+    runner.invoke(
+        app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")]
+    )
+
+    result = runner.invoke(app, ["detect", str(tmp_path / "package")])
+
+    assert result.exit_code == 1
+    assert "--images is required" in result.output
