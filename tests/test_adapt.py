@@ -105,13 +105,14 @@ def test_accuracy_table():
             "label": ["a", "b", "a", "b", "c"],
             "inTraining": [True, True, True, True, False],
             "aiLabel": ["a", "a", "a", "a", "c"],
+            "regionalList": ["a", "a", "b", "b", "a"],
             "adapted": ["a", "b", "a", "b", "a"],
         }
     )
 
     table = adapt.accuracy_table(predictions)
 
-    assert table.loc["test"].to_dict() == {"crops": 3, "trainedLabel": 2, "speciesnet": 0.5, "adapted": 1.0}
+    assert table.loc["test"].to_dict() == {"crops": 3, "trainedLabel": 2, "speciesnet": 0.5, "regionalList": 0.5, "adapted": 1.0}
 
 
 def make_crops(tmp_path):
@@ -137,6 +138,7 @@ def test_run_trains_and_saves_an_adapted_layer(tmp_path):
     assert summary["trainingCrops"] == [3, 3]
     assert summary["knownToSpeciesNet"] == [True, False]
     assert (predictions["adapted"] == predictions["label"]).all()
+    assert (predictions["regionalList"] == "Oryx gazella").all()
     saved = torch.load(tmp_path / "model" / adapt.MODEL_FILE, weights_only=True)
     assert saved["weight"].shape == (3, 2)
     assert saved["classes"] == summary["classes"]
@@ -150,3 +152,47 @@ def test_run_needs_training_crops(tmp_path):
 
     with pytest.raises(ValueError, match="no training crops"):
         adapt.run(crops_dir, tmp_path / "model", device="cpu", speciesnet=tiny_speciesnet())
+
+
+def test_label_table_averages_over_labels():
+    predictions = pd.DataFrame(
+        {
+            "split": ["test"] * 5 + ["train"],
+            "label": ["a", "a", "a", "b", "c", "a"],
+            "inTraining": [True, True, True, True, False, True],
+            "aiLabel": ["a", "a", "b", "a", "c", "a"],
+            "regionalList": ["a", "a", "a", "a", "a", "a"],
+            "adapted": ["a", "a", "a", "b", "a", "b"],
+        }
+    )
+
+    table = adapt.label_table(predictions, "test")
+
+    assert table.index.tolist() == ["a", "b", "average over labels"]
+    assert table.loc["a"].tolist() == [3, 0.67, 1.0, 1.0]
+    assert table.loc["average over labels"].tolist() == [4, 0.33, 0.5, 1.0]
+
+
+def test_train_layer_balanced_weights_rare_classes():
+    features = np.array([[1.0, 0.0]] * 18 + [[0.9, 0.1]] * 2, dtype=np.float32)
+    labels = np.array([0] * 18 + [1] * 2)
+
+    plain = adapt.train_layer(features, labels, torch.zeros(2, 2), torch.zeros(2), epochs=300, learning_rate=0.05)
+    balanced = adapt.train_layer(
+        features, labels, torch.zeros(2, 2), torch.zeros(2), epochs=300, learning_rate=0.05, balanced=True
+    )
+
+    assert adapt.predict(features[-2:], *plain[:2], ["common", "rare"])[0] == ["common", "common"]
+    assert adapt.predict(features[-2:], *balanced[:2], ["common", "rare"])[0] == ["rare", "rare"]
+
+
+def test_run_reuses_cached_features(tmp_path, monkeypatch):
+    crops_dir = make_crops(tmp_path / "crops")
+    speciesnet = tiny_speciesnet()
+    adapt.run(crops_dir, tmp_path / "model", device="cpu", speciesnet=speciesnet)
+    monkeypatch.setattr(adapt, "extract_features", lambda *args: pytest.fail("features were recomputed"))
+
+    _, summary = adapt.run(crops_dir, tmp_path / "model", device="cpu", balanced=True, speciesnet=speciesnet)
+
+    assert summary["balanced"]
+    assert (tmp_path / "model" / adapt.FEATURES_FILE).exists()

@@ -30,12 +30,13 @@ All notable changes to this project are documented here. The format follows
   skipped, and the command warns about labels with no or few training crops.
 - `adapt` command: trains a new final layer for SpeciesNet on the crops from `crops`,
   for only the labels in the training split, on frozen SpeciesNet features. Labels
-  SpeciesNet knows start from its own weights; classes are weighted by their number of
-  crops, and the layer from the epoch with the lowest validation loss is kept
-  (`--epochs`, `--learning-rate`, `--seed`, `--device`). The command saves the layer as
-  `adapted.pt` with every crop's prediction in `predictions.csv`, and prints accuracy
-  per split for SpeciesNet and the adapted layer and the held-out labels it cannot name.
-  Requires the optional `detect` extra.
+  SpeciesNet knows start from its own weights, the layer from the epoch with the lowest validation loss is kept (`--epochs`,
+  `--learning-rate`, `--seed`, `--device`), and `--balanced` weights classes by their
+  number of crops. The command saves the layer as `adapted.pt`, every crop's prediction
+  in `predictions.csv` and the crops' SpeciesNet features in `features.npz`, which later
+  runs reuse. It prints accuracy per split and per label for SpeciesNet as run by
+  `detect`, SpeciesNet limited to the training labels and the adapted layer, and the
+  held-out labels it cannot name. Requires the optional `detect` extra.
 
 ### Changed
 

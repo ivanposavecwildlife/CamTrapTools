@@ -80,10 +80,11 @@ flash (`cam_noflash`) and clock errors.*
   seen, and the command warns about species that are missing from training.
 - **`adapt`**: adapts SpeciesNet to your region. SpeciesNet's camera-trap backbone stays
   frozen and a new final layer is trained on your crops, only for the species in them,
-  starting from SpeciesNet's own weights for species it already knows. This trains in
-  seconds on a laptop (using an Apple or NVIDIA GPU when available), keeps the epoch
-  with the lowest validation loss, and compares the adapted layer with SpeciesNet on
-  every split.
+  starting from SpeciesNet's own weights for species it already knows. It runs on a
+  laptop (using an Apple or NVIDIA GPU when available), keeps the epoch with the lowest
+  validation loss, and compares the adapted layer with SpeciesNet and with SpeciesNet
+  limited to the local species list, overall and per species. `--balanced` favours rare
+  species over overall accuracy.
 - **`export`**: writes a complete Camtrap DP 1.0.2 package (`datapackage.json` and three
   tables) with time zones, coverage, contributors and licenses, using the reviewer's
   decision wherever an event was reviewed. Exported packages pass
@@ -163,6 +164,14 @@ Tested on four deployments from
 - Ordering events by AI confidence put **all 12 events the AI did not get exactly right
   among the first 13 of 60**; the remaining 47 were all correct. Reviewing the least
   confident 22% of events would have caught every mistake.
+- Adapting SpeciesNet on all of Season 1 (2,336 animal images, 20 cameras; 7 cameras
+  held out for testing) raised the share of test crops named correctly to species from
+  **72% to 91%**, and the average over species from 43% to 70%. Most of SpeciesNet's
+  misses were cautious answers such as *Bovidae* (112 of 118), while every miss of the
+  adapted layer is a wrong species: with a confidence threshold of 0.8, chosen on the
+  validation cameras, it named 325 test crops correctly with 10 wrong, against
+  SpeciesNet's 300 with 6 wrong. Limiting SpeciesNet to the local species list, without
+  training, already reached 85%.
 - Results imported from LILA's published MegaDetector run matched the toolkit's own
   detections, and every exported package passes Camtrap DP validation.
 

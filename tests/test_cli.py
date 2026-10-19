@@ -532,6 +532,8 @@ def test_adapt_command_reports_accuracy(monkeypatch, tmp_path):
     assert "Vulpes chama: 3 training crops, new to SpeciesNet" in result.output
     assert "⚠ Labels with no training crops, which the adapted layer cannot name (1 held-out crop):" in result.output
     assert "Canis mesomelas (1)" in result.output
+    assert "Crops named correctly per label, test cameras:" in result.output
+    assert "average over labels" in result.output
 
 
 def test_adapt_command_needs_crops(tmp_path):

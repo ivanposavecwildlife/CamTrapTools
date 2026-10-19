@@ -510,6 +510,10 @@ def adapt_cmd(
     epochs: Annotated[int, typer.Option(help="Most training passes over the crops.")] = adapt.DEFAULT_EPOCHS,
     learning_rate: Annotated[float, typer.Option(help="Step size of the optimiser.")] = adapt.DEFAULT_LEARNING_RATE,
     seed: Annotated[int, typer.Option(help="Random seed, for repeatable training.")] = 0,
+    balanced: Annotated[
+        bool,
+        typer.Option(help="Weight rare species as much as common ones: better on rare species, worse overall."),
+    ] = False,
     device: Annotated[
         str | None, typer.Option(help="cpu, mps (Apple GPU) or cuda (NVIDIA GPU); default: the fastest available.")
     ] = None,
@@ -520,7 +524,7 @@ def adapt_cmd(
         raise typer.Exit(1)
     try:
         predictions, summary = adapt.run(
-            crops_dir, out, epochs=epochs, learning_rate=learning_rate, seed=seed, device=device
+            crops_dir, out, epochs=epochs, learning_rate=learning_rate, seed=seed, device=device, balanced=balanced
         )
     except (RuntimeError, ValueError) as error:
         typer.echo(f"Error: {error}", err=True)
@@ -536,6 +540,11 @@ def adapt_cmd(
         typer.echo(f"  {name}: {crops.plural(count, 'training crop')}, {start}")
     typer.echo("\nCrops named correctly, among labels the layer was trained on:")
     typer.echo(adapt.accuracy_table(predictions).to_string(na_rep="–"))
+    typer.echo("(speciesnet: as run by `detect`; regionalList: SpeciesNet choosing only among these labels)")
+    held_out = next((split for split in ["test", "val"] if (predictions["split"] == split).any()), None)
+    if held_out is not None and predictions.loc[predictions["split"] == held_out, "inTraining"].any():
+        typer.echo(f"\nCrops named correctly per label, {held_out} cameras:")
+        typer.echo(adapt.label_table(predictions, held_out).to_string())
     unseen = predictions.loc[~predictions["inTraining"], "label"].value_counts()
     if not unseen.empty:
         held_out = crops.plural(int(unseen.sum()), "held-out crop")

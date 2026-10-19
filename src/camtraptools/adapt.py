@@ -21,10 +21,11 @@ from camtraptools.detect import DEFAULT_MODEL, parse_taxon
 
 MODEL_FILE = "adapted.pt"
 PREDICTIONS_FILE = "predictions.csv"
+FEATURES_FILE = "features.npz"
 IMAGE_SIZE = 480
 FEATURE_BATCH_SIZE = 8
 DEFAULT_EPOCHS = 300
-DEFAULT_LEARNING_RATE = 0.01
+DEFAULT_LEARNING_RATE = 0.001
 DEFAULT_WEIGHT_DECAY = 0.01
 PATIENCE = 30
 
@@ -165,13 +166,15 @@ def train_layer(
     learning_rate: float = DEFAULT_LEARNING_RATE,
     weight_decay: float = DEFAULT_WEIGHT_DECAY,
     seed: int = 0,
+    balanced: bool = False,
 ):
-    """Train the final layer with cross-entropy, weighting each class by the inverse of
-    its number of training crops so common species do not drown out rare ones.
+    """Train the final layer with cross-entropy. If ``balanced``, each class is weighted
+    by the inverse of its number of training crops, so common species do not drown out
+    rare ones; otherwise every crop counts the same.
 
     With validation crops, keeps the layer from the epoch with the lowest validation
-    loss (epoch 0 is the starting layer) and stops after ``PATIENCE`` epochs without
-    improvement. Returns the weight, bias and the epoch kept.
+    loss, weighted the same way (epoch 0 is the starting layer), and stops after
+    ``PATIENCE`` epochs without improvement. Returns the weight, bias and the epoch kept.
     """
     torch = require_torch()
     torch.manual_seed(seed)
@@ -179,7 +182,7 @@ def train_layer(
     y = torch.from_numpy(train_labels).long()
     counts = torch.bincount(y, minlength=start_weight.shape[1]).float()
     class_weights = torch.where(counts > 0, len(y) / (len(counts) * counts.clamp(min=1)), torch.zeros_like(counts))
-    loss_function = torch.nn.CrossEntropyLoss(weight=class_weights)
+    loss_function = torch.nn.CrossEntropyLoss(weight=class_weights if balanced else None)
     weight = start_weight.clone().requires_grad_(True)
     bias = start_bias.clone().requires_grad_(True)
     optimizer = torch.optim.AdamW([weight, bias], lr=learning_rate, weight_decay=weight_decay)
@@ -190,7 +193,7 @@ def train_layer(
 
     def validation_loss() -> float:
         with torch.no_grad():
-            return torch.nn.functional.cross_entropy(x_val @ weight + bias, y_val).item()
+            return loss_function(x_val @ weight + bias, y_val).item()
 
     best = (validation_loss() if has_val else float("inf"), weight.detach().clone(), bias.detach().clone(), 0)
     for epoch in range(1, epochs + 1):
@@ -220,7 +223,8 @@ def predict(features: np.ndarray, weight, bias, classes: list[str]) -> tuple[lis
 
 def accuracy_table(predictions: pd.DataFrame) -> pd.DataFrame:
     """Return, per split, how many crops have a label the layer was trained on, and
-    how often SpeciesNet (as run by ``detect``) and the adapted layer named them."""
+    how often each approach named them: SpeciesNet as run by ``detect``, SpeciesNet
+    choosing only among the training labels (no training), and the adapted layer."""
     rows = []
     for split, group in predictions.groupby("split", sort=False):
         known = group[group["inTraining"]]
@@ -229,11 +233,41 @@ def accuracy_table(predictions: pd.DataFrame) -> pd.DataFrame:
                 "split": split,
                 "crops": len(group),
                 "trainedLabel": len(known),
-                "speciesnet": round((known["aiLabel"] == known["label"]).mean(), 2) if len(known) else None,
-                "adapted": round((known["adapted"] == known["label"]).mean(), 2) if len(known) else None,
+                **{
+                    column: round((known[source] == known["label"]).mean(), 2) if len(known) else None
+                    for column, source in [("speciesnet", "aiLabel"), ("regionalList", "regionalList"), ("adapted", "adapted")]
+                },
             }
         )
     return pd.DataFrame(rows).set_index("split")
+
+
+def cached_features(backbone, crops_dir: Path, paths: list[str], model: str, cache: Path, device: str):
+    """Return the features of every crop, reusing ``cache`` when it was made from the
+    same crops and model, so retraining with other settings takes seconds."""
+    if cache.exists():
+        with np.load(cache, allow_pickle=False) as saved:
+            if saved["paths"].tolist() == paths and str(saved["model"]) == model:
+                return saved["features"]
+    features = extract_features(backbone, [crops_dir / path for path in paths], device)
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    np.savez(cache, features=features, paths=np.array(paths), model=np.array(model))
+    return features
+
+
+def label_table(predictions: pd.DataFrame, split: str) -> pd.DataFrame:
+    """Return, for each trained label in ``split``, its number of crops and how often
+    each approach named it, with the average over labels as the last row, so rare
+    species count as much as common ones."""
+    known = predictions[(predictions["split"] == split) & predictions["inTraining"]]
+    approaches = {"speciesnet": "aiLabel", "regionalList": "regionalList", "adapted": "adapted"}
+    table = pd.DataFrame(
+        {column: (known[source] == known["label"]).groupby(known["label"]).mean() for column, source in approaches.items()}
+    )
+    table.insert(0, "crops", known["label"].value_counts())
+    table = table.sort_values("crops", ascending=False)
+    table.loc["average over labels"] = [len(known), *table[list(approaches)].mean()]
+    return table.astype({"crops": int}).round(2)
 
 
 def run(
@@ -244,10 +278,12 @@ def run(
     learning_rate: float = DEFAULT_LEARNING_RATE,
     seed: int = 0,
     device: str | None = None,
+    balanced: bool = False,
     speciesnet=None,
 ) -> tuple[pd.DataFrame, dict]:
     """Train an adapted final layer on the crops made by ``crops`` and save it as
-    ``out_dir/adapted.pt``, with every crop's prediction in ``predictions.csv``.
+    ``out_dir/adapted.pt``, with every crop's prediction in ``predictions.csv`` and the
+    crops' SpeciesNet features in ``features.npz`` for later runs.
 
     Returns the predictions and a summary of the training. ``speciesnet`` can supply
     an already loaded backbone, weight, bias and label names.
@@ -259,7 +295,8 @@ def run(
         raise ValueError("there are no training crops")
     backbone, weight, bias, names = speciesnet or load_speciesnet(model)
     device = device or best_device()
-    features = extract_features(backbone, [crops_dir / path for path in crops["filePath"]], device)
+    paths = crops["filePath"].tolist()
+    features = cached_features(backbone, crops_dir, paths, model, out_dir / FEATURES_FILE, device)
 
     class_index = {name: position for position, name in enumerate(classes)}
     crops["inTraining"] = crops["label"].isin(class_index)
@@ -269,12 +306,13 @@ def run(
     start_weight, start_bias, known = initial_layer(classes, weight, bias, names)
     new_weight, new_bias, epochs_used = train_layer(
         features[train], labels[train], start_weight, start_bias, features[val], labels[val],
-        epochs, learning_rate, seed=seed,
+        epochs, learning_rate, seed=seed, balanced=balanced,
     )
 
+    crops["regionalList"], _ = predict(features, start_weight, start_bias, classes)
     crops["adapted"], crops["adaptedConfidence"] = predict(features, new_weight, new_bias, classes)
     out_dir.mkdir(parents=True, exist_ok=True)
-    columns = ["filePath", "split", "label", "inTraining", "aiLabel", "adapted", "adaptedConfidence"]
+    columns = ["filePath", "split", "label", "inTraining", "aiLabel", "regionalList", "adapted", "adaptedConfidence"]
     crops[columns].to_csv(out_dir / PREDICTIONS_FILE, index=False)
     summary = {
         "classes": classes,
@@ -282,6 +320,7 @@ def run(
         "knownToSpeciesNet": known,
         "baseModel": model,
         "epochs": epochs_used,
+        "balanced": balanced,
         "validated": bool(val.any()),
         "device": device,
         "created": datetime.now().astimezone().isoformat(timespec="seconds"),
