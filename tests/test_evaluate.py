@@ -240,3 +240,16 @@ def test_failure_report_when_everything_is_right(make_image, tmp_path):
     compared = pd.DataFrame({"eventID": ["cam-0002"], "truth": ["Oryx gazella"], "ai": ["Oryx gazella"], "outcome": ["correct"], "confidence": [0.99]})
 
     assert "The AI got every event exactly right." in evaluate.failure_report(package, tmp_path / "images", compared)
+
+
+def test_run_can_compare_only_some_deployments(tmp_path):
+    package = make_package(tmp_path)
+    observations = pd.read_csv(package / "observations.csv", dtype=str)
+    observations["deploymentID"] = ["cam", "cam", "cam", "cam", "north", "south", "north"]
+    observations.to_csv(package / "observations.csv", index=False)
+    truth_file = tmp_path / "truth.csv"
+    truth_file.write_text("filePath,scientificName\ncam/a.JPG,\ncam/b.JPG,Oryx gazella\ncam/c.JPG,Oryx gazella\ncam/d.JPG,\n")
+
+    compared = evaluate.run(package, truth_file, deployments=["north"])
+
+    assert compared["eventID"].tolist() == ["cam-0001", "cam-0003"]

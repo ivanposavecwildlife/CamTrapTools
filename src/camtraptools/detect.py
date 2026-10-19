@@ -79,8 +79,9 @@ def parse_taxon(label: str) -> tuple[str | None, str]:
 
 
 def load_detections(results_file: Path) -> pd.DataFrame:
-    """Return one row per detection: image, category, confidence, bounding box and,
-    for classified detections, SpeciesNet's final label and score.
+    """Return one row per detection: image, the detection's position in the image's
+    results, category, confidence, bounding box and, for classified detections,
+    SpeciesNet's final label and score.
 
     Bounding boxes are ``x``, ``y`` (top left), ``width`` and ``height``, as
     fractions of the image size.
@@ -88,12 +89,13 @@ def load_detections(results_file: Path) -> pd.DataFrame:
     results = json.loads(results_file.read_text(encoding="utf-8"))
     rows = []
     for prediction in results["predictions"]:
-        for detection in prediction.get("detections") or []:
+        for number, detection in enumerate(prediction.get("detections") or []):
             x, y, width, height = detection["bbox"]
             classification = detection.get("processed_classification") or {}
             rows.append(
                 {
                     "filePath": prediction["filepath"],
+                    "detection": number,
                     "category": detection["label"],
                     "conf": detection["conf"],
                     "x": x,
@@ -104,7 +106,7 @@ def load_detections(results_file: Path) -> pd.DataFrame:
                     "score": classification.get("score"),
                 }
             )
-    columns = ["filePath", "category", "conf", "x", "y", "width", "height", "label", "score"]
+    columns = ["filePath", "detection", "category", "conf", "x", "y", "width", "height", "label", "score"]
     return pd.DataFrame(rows, columns=columns)
 
 
@@ -140,6 +142,7 @@ def summarize_species(media: pd.DataFrame, detections: pd.DataFrame, threshold: 
 
 
 OBSERVATIONS_FILE = "observations.csv"
+ADAPTED_FILE = "adapted.csv"
 OBSERVATION_COLUMNS = [
     "observationID",
     "deploymentID",
@@ -178,10 +181,16 @@ def observation_type_and_name(detection) -> tuple[str, str | None]:
     return SPECIAL_LABELS.get(common_name, "animal"), scientific_name
 
 
-def build_observations(media: pd.DataFrame, results_file: Path, threshold: float) -> pd.DataFrame:
+def build_observations(
+    media: pd.DataFrame, results_file: Path, threshold: float, adapted: pd.DataFrame | None = None
+) -> pd.DataFrame:
     """Return Camtrap DP media-level observations: one per detection at or above
     ``threshold``, one "blank" per image without any, and one "unclassified" per
-    image that was not processed or could not be."""
+    image that was not processed or could not be.
+
+    ``adapted`` holds answers from an adapted layer (see ``adapt.classify_detections``);
+    detections where it is marked ``used`` take its scientific name and probability.
+    """
     results = json.loads(results_file.read_text(encoding="utf-8"))
     completion_time = results.get("info", {}).get("completion_time")
     classifier = results.get("info", {}).get("classifier_name", "SpeciesNet")
@@ -190,6 +199,10 @@ def build_observations(media: pd.DataFrame, results_file: Path, threshold: float
     confident = detections[detections["conf"] >= threshold]
     detections_by_image = dict(list(confident.groupby("filePath")))
     failed = set(failed_images(results_file))
+    replacements = {}
+    if adapted is not None:
+        for row in adapted[adapted["used"]].itertuples():
+            replacements[(row.filePath, row.detection)] = row
     rows = []
     for image in media.itertuples():
         base = {
@@ -208,9 +221,16 @@ def build_observations(media: pd.DataFrame, results_file: Path, threshold: float
             for detection in detections_by_image[image.filePath].itertuples():
                 observation_type, scientific_name = observation_type_and_name(detection)
                 probability = detection.score if isinstance(detection.label, str) else detection.conf
+                classified_by = base["classifiedBy"]
+                replacement = replacements.get((image.filePath, detection.detection))
+                if replacement is not None:
+                    observation_type, scientific_name = "animal", replacement.adapted
+                    probability = replacement.adaptedConfidence
+                    classified_by = f"{classified_by} with adapted layer {replacement.model}"
                 rows.append(
                     {
                         **base,
+                        "classifiedBy": classified_by,
                         "observationType": observation_type,
                         "scientificName": scientific_name,
                         "count": 1 if observation_type in CATEGORIES else None,
@@ -229,9 +249,13 @@ def build_observations(media: pd.DataFrame, results_file: Path, threshold: float
     return observations
 
 
-def write_observations(package_dir: Path, threshold: float = DEFAULT_THRESHOLD) -> pd.DataFrame:
-    """Write ``observations.csv`` to the package from its SpeciesNet results."""
+def write_observations(
+    package_dir: Path, threshold: float = DEFAULT_THRESHOLD, use_adapted: bool = False
+) -> pd.DataFrame:
+    """Write ``observations.csv`` to the package from its SpeciesNet results and, with
+    ``use_adapted``, the adapted layer's answers in ``adapted.csv``."""
     media = pd.read_csv(package_dir / "media.csv", dtype={"timestamp": str})
-    observations = build_observations(media, package_dir / RESULTS_FILE, threshold)
+    adapted = pd.read_csv(package_dir / ADAPTED_FILE) if use_adapted else None
+    observations = build_observations(media, package_dir / RESULTS_FILE, threshold, adapted)
     observations.to_csv(package_dir / OBSERVATIONS_FILE, index=False)
     return observations

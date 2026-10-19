@@ -193,9 +193,11 @@ def confusion_matrix(compared: pd.DataFrame) -> pd.DataFrame:
     return pd.crosstab(compared["truth"], compared["ai"], rownames=["truth"], colnames=["AI"])
 
 
-def run(package_dir: Path, truth_file: Path | None = None) -> pd.DataFrame:
+def run(package_dir: Path, truth_file: Path | None = None, deployments: list[str] | None = None) -> pd.DataFrame:
     """Compare the AI with the reviews (or ``truth_file``), save the per-event
-    comparison as ``evaluation.csv`` in the package, and return it."""
+    comparison as ``evaluation.csv`` in the package, and return it. With
+    ``deployments``, only events from those deployments are compared, e.g. cameras
+    held out from training an adapted layer."""
     observations = pd.read_csv(package_dir / OBSERVATIONS_FILE, dtype=str)
     truth = truth_from_file(truth_file, package_dir) if truth_file else truth_from_reviews(package_dir)
     ancestry = ancestry_from_results(package_dir)
@@ -205,6 +207,10 @@ def run(package_dir: Path, truth_file: Path | None = None) -> pd.DataFrame:
     machine = observations[observations["classificationMethod"] != "human"]
     confidence = order_events(machine[machine["observationLevel"] == "event"], machine, "uncertainty")
     compared = compared.merge(confidence[["eventID", "confidence"]], on="eventID", how="left")
+    if deployments:
+        events = machine.loc[machine["observationLevel"] == "event", ["eventID", "deploymentID"]].drop_duplicates()
+        kept = events.loc[events["deploymentID"].isin(deployments), "eventID"]
+        compared = compared[compared["eventID"].isin(kept)].reset_index(drop=True)
     compared.to_csv(package_dir / EVALUATION_FILE, index=False)
     return compared
 

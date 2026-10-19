@@ -142,6 +142,8 @@ def test_run_trains_and_saves_an_adapted_layer(tmp_path):
     saved = torch.load(tmp_path / "model" / adapt.MODEL_FILE, weights_only=True)
     assert saved["weight"].shape == (3, 2)
     assert saved["classes"] == summary["classes"]
+    assert saved["padding"] == 0.1
+    assert saved["threshold"] is not None
     assert len(pd.read_csv(tmp_path / "model" / adapt.PREDICTIONS_FILE)) == 18
 
 
@@ -196,3 +198,104 @@ def test_run_reuses_cached_features(tmp_path, monkeypatch):
 
     assert summary["balanced"]
     assert (tmp_path / "model" / adapt.FEATURES_FILE).exists()
+
+
+def threshold_predictions(adapted, confidence, ai_labels):
+    return pd.DataFrame(
+        {
+            "split": ["val"] * 4,
+            "label": ["a", "a", "b", "b"],
+            "inTraining": True,
+            "aiLabel": ai_labels,
+            "adapted": adapted,
+            "adaptedConfidence": confidence,
+        }
+    )
+
+
+def test_choose_threshold_matches_speciesnet_precision():
+    predictions = threshold_predictions(
+        ["a", "b", "b", "b"], [0.9, 0.3, 0.8, 0.6], ["Oryx gazella", "Bovidae", "Vulpes chama", "animal"]
+    )
+    predictions["label"] = ["Oryx gazella", "Oryx gazella", "Vulpes chama", "Vulpes chama"]
+    predictions["adapted"] = ["Oryx gazella", "Vulpes chama", "Vulpes chama", "Vulpes chama"]
+
+    assert adapt.choose_threshold(predictions) == (0.6, 1.0)
+
+
+def test_choose_threshold_without_speciesnet_species_answers():
+    predictions = threshold_predictions(["a"] * 4, [0.9] * 4, ["animal"] * 4)
+
+    assert adapt.choose_threshold(predictions) == (adapt.FALLBACK_THRESHOLD, None)
+
+
+def test_choose_threshold_when_never_precise_enough():
+    predictions = threshold_predictions(["b", "b", "a", "a"], [0.9] * 4, ["a x", "a x", "b x", "b x"])
+    predictions["label"] = ["a x", "a x", "b x", "b x"]
+
+    assert adapt.choose_threshold(predictions) == (None, 1.0)
+
+
+@pytest.mark.parametrize(
+    ("speciesnet_name", "confidence", "threshold", "expected"),
+    [
+        ("Bovidae", 0.9, 0.7, True),
+        (None, 0.9, 0.7, True),
+        ("Oryx gazella", 0.9, 0.7, True),
+        ("Oryx gazella", 0.5, 0.7, False),
+        ("Panthera pardus", 0.99, 0.7, False),
+        ("Bovidae", 0.99, None, False),
+    ],
+)
+def test_use_adapted(speciesnet_name, confidence, threshold, expected):
+    classes = ["Oryx gazella", "Vulpes chama"]
+
+    assert adapt.use_adapted(speciesnet_name, "Vulpes chama", confidence, threshold, classes) == expected
+
+
+def test_load_adapted_explains_missing_model(tmp_path):
+    with pytest.raises(ValueError, match="run `camtraptools adapt` first"):
+        adapt.load_adapted(tmp_path)
+
+
+def make_detection_package(tmp_path):
+    images = tmp_path / "images"
+    (images / "cam").mkdir(parents=True)
+    image = Image.new("RGB", (100, 100), (40, 40, 255))
+    image.paste((255, 40, 40), (0, 0, 50, 100))
+    image.save(images / "cam" / "a.JPG")
+    package = tmp_path / "package"
+    package.mkdir()
+    animal = "uuid;mammalia;artiodactyla;bovidae;;;bovidae family"
+    leopard = "uuid;mammalia;carnivora;felidae;panthera;pardus;leopard"
+    results = {
+        "predictions": [
+            {
+                "filepath": "cam/a.JPG",
+                "detections": [
+                    {"label": "animal", "conf": 0.9, "bbox": [0, 0, 0.5, 1], "processed_classification": {"class": animal, "score": 0.6}},
+                    {"label": "animal", "conf": 0.9, "bbox": [0.5, 0, 0.5, 1], "processed_classification": {"class": leopard, "score": 0.9}},
+                    {"label": "animal", "conf": 0.1, "bbox": [0.5, 0, 0.5, 1]},
+                    {"label": "human", "conf": 0.9, "bbox": [0, 0, 1, 1]},
+                ],
+            }
+        ]
+    }
+    (package / "speciesnet.json").write_text(__import__("json").dumps(results), encoding="utf-8")
+    return package, images
+
+
+def test_classify_detections_crops_and_classifies_animals(tmp_path):
+    crops_dir = make_crops(tmp_path / "crops")
+    speciesnet = tiny_speciesnet()
+    adapt.run(crops_dir, tmp_path / "model", device="cpu", speciesnet=speciesnet)
+    layer = adapt.load_adapted(tmp_path / "model")
+    package, images = make_detection_package(tmp_path)
+
+    answers = adapt.classify_detections(package, images, layer, 0.2, threshold=0.0, device="cpu", speciesnet=speciesnet)
+
+    assert answers[["detection", "speciesnet", "adapted", "used"]].values.tolist() == [
+        [0, "Bovidae", "Oryx gazella", True],
+        [1, "Panthera pardus", "Vulpes chama", False],
+    ]
+    assert pd.read_csv(package / "adapted.csv").shape[0] == 2

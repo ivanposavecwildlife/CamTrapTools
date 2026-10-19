@@ -37,6 +37,17 @@ All notable changes to this project are documented here. The format follows
   runs reuse. It prints accuracy per split and per label for SpeciesNet as run by
   `detect`, SpeciesNet limited to the training labels and the adapted layer, and the
   held-out labels it cannot name. Requires the optional `detect` extra.
+- `adapt` chooses a confidence threshold on the validation crops: the lowest at which
+  the adapted layer is as precise as SpeciesNet's species-level answers. It is saved in
+  `adapted.pt` with the crop padding.
+- `detect --adapted MODEL_DIR` classifies every animal detection with an adapted layer,
+  cropped like the training crops, and uses its answer at or above the layer's threshold
+  (or `--adapted-threshold`), except where SpeciesNet named a species the layer was not
+  trained on. Answers are saved in `adapted.csv`, observations record the adapted layer
+  in `classifiedBy`, and the command prints how many of SpeciesNet's answers changed.
+- `evaluate --deployment` compares only events from the given deployments, such as
+  cameras held out from training.
+- `crops.csv` records the padding used.
 
 ### Changed
 

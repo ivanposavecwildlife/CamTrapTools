@@ -167,10 +167,21 @@ def detect_cmd(
         float, typer.Option(help="Minimum detection confidence for keeping a detection as an observation.")
     ] = detect.DEFAULT_THRESHOLD,
     rerun: Annotated[bool, typer.Option(help="Run SpeciesNet even if results for these settings exist.")] = False,
+    adapted: Annotated[
+        Path | None,
+        typer.Option(exists=True, help="Folder with an adapted layer from `camtraptools adapt`, to identify animals."),
+    ] = None,
+    adapted_threshold: Annotated[
+        float | None,
+        typer.Option(help="Confidence above which the adapted layer's answer is used; default: the layer's own."),
+    ] = None,
 ) -> None:
     """Find and identify animals, people and vehicles in every image with SpeciesNet."""
     if not (package / "media.csv").exists():
         typer.echo(f"Error: no media.csv in {package}; run `camtraptools ingest` first.", err=True)
+        raise typer.Exit(1)
+    if adapted is not None and images is None:
+        typer.echo("Error: --adapted needs --images to crop the animals.", err=True)
         raise typer.Exit(1)
     results_file = package / detect.RESULTS_FILE
     if rerun or not detect.has_results(results_file, model, country):
@@ -184,10 +195,37 @@ def detect_cmd(
             raise typer.Exit(1)
     else:
         typer.echo(f"Using existing results in {results_file} (pass --rerun to run SpeciesNet again).")
-    report_detections(package, results_file, threshold)
+    if adapted is not None:
+        try:
+            layer = adapt.load_adapted(adapted)
+            answers = adapt.classify_detections(package, images, layer, threshold, adapted_threshold)
+        except (RuntimeError, ValueError) as error:
+            typer.echo(f"Error: {error}", err=True)
+            raise typer.Exit(1) from error
+        report_adapted(answers, layer, adapted_threshold)
+    report_detections(package, results_file, threshold, use_adapted=adapted is not None)
 
 
-def report_detections(package: Path, results_file: Path, threshold: float) -> None:
+def report_adapted(answers: pd.DataFrame, layer: dict, threshold: float | None) -> None:
+    """Print how often the adapted layer's answer replaced SpeciesNet's."""
+    threshold = layer["threshold"] if threshold is None else threshold
+    if threshold is None:
+        typer.echo("The adapted layer never reached SpeciesNet's precision on validation, so it is not used.")
+        return
+    changed = answers["used"] & (answers["adapted"] != answers["speciesnet"])
+    typer.echo(
+        f"Adapted layer ({len(layer['classes'])} labels) at confidence {threshold:.3f} or higher: "
+        f"used for {answers['used'].sum()} of {len(answers)} animal detections, "
+        f"changing {changed.sum()} of SpeciesNet's answers."
+    )
+    if changed.any():
+        changes = answers[changed].fillna({"speciesnet": "animal"}).value_counts(["speciesnet", "adapted"])
+        typer.echo("Most common changes (SpeciesNet → adapted):")
+        for (before, after), count in changes.head(10).items():
+            typer.echo(f"  {before} → {after}: {count}")
+
+
+def report_detections(package: Path, results_file: Path, threshold: float, use_adapted: bool = False) -> None:
     """Print detection and species summaries and write observations.csv."""
     media = pd.read_csv(package / "media.csv")
     detections = detect.load_detections(results_file)
@@ -200,7 +238,7 @@ def report_detections(package: Path, results_file: Path, threshold: float) -> No
     failed = detect.failed_images(results_file)
     if failed:
         typer.echo(f"{len(failed)} image(s) could not be fully processed, for example {failed[0]}")
-    observations = detect.write_observations(package, threshold)
+    observations = detect.write_observations(package, threshold, use_adapted)
     typer.echo(f"Wrote {results_file} and {package / detect.OBSERVATIONS_FILE} ({len(observations)} observations)")
 
 
@@ -409,6 +447,10 @@ def evaluate_cmd(
     images: Annotated[
         Path | None, typer.Option(exists=True, file_okay=False, help="The SD-card folder, needed for --report.")
     ] = None,
+    deployment: Annotated[
+        list[str] | None,
+        typer.Option(help="Only evaluate events from this deployment; repeat for several (e.g. held-out cameras)."),
+    ] = None,
 ) -> None:
     """Measure the AI against ground truth: precision, recall, thresholds and mistakes."""
     if report is not None and images is None:
@@ -417,7 +459,7 @@ def evaluate_cmd(
     if not (package / detect.OBSERVATIONS_FILE).exists():
         typer.echo(f"Error: no observations.csv in {package}; run `camtraptools detect` first.", err=True)
         raise typer.Exit(1)
-    compared = evaluate.run(package, truth)
+    compared = evaluate.run(package, truth, deployment)
     if compared.empty:
         source = truth.name if truth else "reviews"
         typer.echo(f"No events to evaluate: {source} has no labels for this package's events.")
@@ -550,4 +592,16 @@ def adapt_cmd(
         held_out = crops.plural(int(unseen.sum()), "held-out crop")
         typer.echo(f"\n⚠ Labels with no training crops, which the adapted layer cannot name ({held_out}):")
         typer.echo("  " + ", ".join(f"{label} ({count})" for label, count in unseen.items()))
+    if summary["threshold"] is None:
+        typer.echo(
+            f"\n⚠ No confidence reached SpeciesNet's precision on validation ({summary['speciesnetPrecision']:.0%}), "
+            "so `detect --adapted` will not use this layer unless you pass --adapted-threshold."
+        )
+    elif summary["speciesnetPrecision"] is None:
+        typer.echo(f"\nNo validation crops to choose a threshold on; `detect --adapted` will use {summary['threshold']}.")
+    else:
+        typer.echo(
+            f"\nThreshold for `detect --adapted`: {summary['threshold']:.3f}, where the adapted layer is as precise "
+            f"on validation as SpeciesNet's species answers ({summary['speciesnetPrecision']:.0%})."
+        )
     typer.echo(f"\nWrote {out / adapt.MODEL_FILE} and {out / adapt.PREDICTIONS_FILE}")

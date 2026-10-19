@@ -534,6 +534,7 @@ def test_adapt_command_reports_accuracy(monkeypatch, tmp_path):
     assert "Canis mesomelas (1)" in result.output
     assert "Crops named correctly per label, test cameras:" in result.output
     assert "average over labels" in result.output
+    assert "Threshold for `detect --adapted`:" in result.output
 
 
 def test_adapt_command_needs_crops(tmp_path):
@@ -541,3 +542,40 @@ def test_adapt_command_needs_crops(tmp_path):
 
     assert result.exit_code == 1
     assert "no crops.csv" in result.output
+
+
+def test_detect_command_uses_adapted_layer(make_image, monkeypatch, tmp_path):
+    pytest.importorskip("torch")
+    from test_adapt import make_crops, tiny_speciesnet
+
+    from camtraptools import adapt
+
+    adapt.run(make_crops(tmp_path / "crops"), tmp_path / "model", device="cpu", speciesnet=tiny_speciesnet())
+    monkeypatch.setattr("camtraptools.adapt.load_speciesnet", lambda model: tiny_speciesnet())
+    monkeypatch.setattr("camtraptools.adapt.best_device", lambda: "cpu")
+    make_image("images/camera_A/IMG_0001.JPG", date_time_original="2024:03:01 06:00:00")
+    runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")])
+    write_speciesnet_results(tmp_path / "package", 0.9)
+
+    result = runner.invoke(
+        app,
+        [
+            "detect", str(tmp_path / "package"), "--images", str(tmp_path / "images"),
+            "--adapted", str(tmp_path / "model"), "--adapted-threshold", "0",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Adapted layer (2 labels) at confidence 0.000 or higher: used for 1 of 1 animal detections" in result.output
+    observation = pd.read_csv(tmp_path / "package" / "observations.csv").iloc[0]
+    assert observation["classifiedBy"].startswith("SpeciesNet 4.0.3a with adapted layer (2 labels")
+
+
+def test_detect_adapted_needs_images(make_image, tmp_path):
+    make_image("images/camera_A/IMG_0001.JPG")
+    runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")])
+
+    result = runner.invoke(app, ["detect", str(tmp_path / "package"), "--adapted", str(tmp_path)])
+
+    assert result.exit_code == 1
+    assert "--adapted needs --images" in result.output

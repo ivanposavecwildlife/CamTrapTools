@@ -98,6 +98,7 @@ def test_load_detections_has_one_row_per_detection(results_file):
     assert (first["x"], first["y"], first["width"], first["height"]) == (0.1, 0.2, 0.3, 0.4)
     assert (first["label"], first["score"]) == (GEMSBOK, 0.99)
     assert pd.isna(detections.loc[3, "label"])
+    assert list(detections["detection"]) == [0, 0, 1, 2, 0, 0]
 
 
 def test_failed_images_are_listed(results_file):
@@ -142,6 +143,27 @@ def test_build_observations_copies_box_and_species_score(results_file):
     assert gemsbok["eventStart"] == gemsbok["eventEnd"] == "2024-03-01T06:00:00"
     assert (gemsbok["bboxX"], gemsbok["bboxY"], gemsbok["bboxWidth"], gemsbok["bboxHeight"]) == (0.1, 0.2, 0.3, 0.4)
     assert gemsbok["classificationProbability"] == 0.99
+
+
+def test_build_observations_uses_adapted_answers_marked_used(results_file):
+    adapted = pd.DataFrame(
+        {
+            "filePath": ["camera_A/IMG_0001.JPG", "camera_A/IMG_0002.JPG"],
+            "detection": [0, 1],
+            "adapted": ["Vulpes chama", "Raphicerus campestris"],
+            "adaptedConfidence": [0.4, 0.93],
+            "used": [False, True],
+            "model": ["(2 labels)", "(2 labels)"],
+        }
+    )
+
+    observations = detect.build_observations(make_media(), results_file, threshold=0.2, adapted=adapted)
+
+    gemsbok, steenbok = observations.iloc[0], observations.iloc[2]
+    assert (gemsbok["scientificName"], gemsbok["classifiedBy"]) == ("Oryx gazella", "SpeciesNet 4.0.3a")
+    assert steenbok["scientificName"] == "Raphicerus campestris"
+    assert steenbok["classificationProbability"] == 0.93
+    assert steenbok["classifiedBy"] == "SpeciesNet 4.0.3a with adapted layer (2 labels)"
 
 
 def test_unclassified_detection_keeps_detector_category(results_file):

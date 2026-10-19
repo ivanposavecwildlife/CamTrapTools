@@ -24,7 +24,7 @@ JPEG_QUALITY = 95
 
 CROP_COLUMNS = [
     "filePath", "split", "label", "observationID", "mediaID", "eventID",
-    "deploymentID", "location", "aiLabel", "width", "height",
+    "deploymentID", "location", "aiLabel", "width", "height", "padding",
 ]
 
 
@@ -154,6 +154,7 @@ def run(
                 "aiLabel": row.scientificName if isinstance(row.scientificName, str) else row.observationType,
                 "width": box[2] - box[0],
                 "height": box[3] - box[1],
+                "padding": padding,
             }
         )
     crops = pd.DataFrame(rows, columns=CROP_COLUMNS)

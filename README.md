@@ -84,7 +84,10 @@ flash (`cam_noflash`) and clock errors.*
   laptop (using an Apple or NVIDIA GPU when available), keeps the epoch with the lowest
   validation loss, and compares the adapted layer with SpeciesNet and with SpeciesNet
   limited to the local species list, overall and per species. `--balanced` favours rare
-  species over overall accuracy.
+  species over overall accuracy. It also picks a confidence threshold on the validation
+  cameras: the lowest at which the adapted layer is as precise as SpeciesNet.
+  `detect --adapted my_model` then uses the adapted answer for every animal above that
+  threshold, unless SpeciesNet named a species the layer was never trained on.
 - **`export`**: writes a complete Camtrap DP 1.0.2 package (`datapackage.json` and three
   tables) with time zones, coverage, contributors and licenses, using the reviewer's
   decision wherever an event was reviewed. Exported packages pass
@@ -111,6 +114,7 @@ camtraptools review-stats my_project
 camtraptools evaluate my_project --report mistakes.html --images sd_cards
 camtraptools crops my_project --images sd_cards --out my_crops
 camtraptools adapt my_crops --out my_model
+camtraptools detect my_project --images sd_cards --adapted my_model
 camtraptools export my_project --out publish --title "My survey" \
     --contributor "Your Name" --timezone Africa/Johannesburg
 ```
@@ -172,6 +176,10 @@ Tested on four deployments from
   validation cameras, it named 325 test crops correctly with 10 wrong, against
   SpeciesNet's 300 with 6 wrong. Limiting SpeciesNet to the local species list, without
   training, already reached 85%.
+- With the adapted layer in `detect` (threshold 0.69, chosen on the validation cameras),
+  **correct events on the test cameras rose from 72 to 92 of 104** and wrong events fell
+  from 16 to 9. Of the 78 test detections it changed, 69 went from not right to right
+  and none from right to wrong.
 - Results imported from LILA's published MegaDetector run matched the toolkit's own
   detections, and every exported package passes Camtrap DP validation.
 
