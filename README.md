@@ -88,6 +88,12 @@ flash (`cam_noflash`) and clock errors.*
   cameras: the lowest at which the adapted layer is as precise as SpeciesNet.
   `detect --adapted my_model` then uses the adapted answer for every animal above that
   threshold, unless SpeciesNet named a species the layer was never trained on.
+- **`ecology`**: turns events into a detection history per species (camera sites by
+  sampling occasions of `--occasion-days`, default 7: recorded, not recorded, or camera
+  not running), the sampling effort per site and occasion, and naive occupancy: the
+  share of surveyed sites where each species was recorded, with its weekly detection
+  rate. Reviewed decisions replace the AI's, and higher taxa are left out unless asked
+  for (`--all-taxa`, `--taxon`).
 - **`export`**: writes a complete Camtrap DP 1.0.2 package (`datapackage.json` and three
   tables) with time zones, coverage, contributors and licenses, using the reviewer's
   decision wherever an event was reviewed. Exported packages pass
@@ -115,6 +121,7 @@ camtraptools evaluate my_project --report mistakes.html --images sd_cards
 camtraptools crops my_project --images sd_cards --out my_crops
 camtraptools adapt my_crops --out my_model
 camtraptools detect my_project --images sd_cards --adapted my_model
+camtraptools ecology my_project --out my_ecology
 camtraptools export my_project --out publish --title "My survey" \
     --contributor "Your Name" --timezone Africa/Johannesburg
 ```
@@ -197,7 +204,7 @@ SD card ─► ingest/check ─► detect/events ─► review ─► ecology �
 | Detection | `detect`, `events`, `import`, `export` | SpeciesNet detection and species identification, independent events, importing other tools' results, validated Camtrap DP export | ✅ v0.2.0 |
 | Review | `review`, `review-stats` | Local web app for checking AI labels, least confident first; review statistics | ✅ v0.3.0 |
 | Evaluation | `evaluate`, `crops`, `adapt` | Per-species accuracy and confidence thresholds; training data and regional fine-tuning | ✅ v0.4.0 |
-| Ecology | `ecology` | Occupancy and activity analysis, and how sensitive results are to AI errors | Planned |
+| Ecology | `ecology` | Occupancy and activity analysis, and how sensitive results are to AI errors | In progress |
 
 ## Development
 

@@ -6,10 +6,16 @@ Writes, under the output folder:
   images, 2 GB), one folder per camera. Blank images and images of people are left out.
 - ``truth.csv``: the volunteer label of each image (``filePath``, ``scientificName``
   and the taxon's genus, family, order and class), for ``crops`` and ``evaluate``.
+- ``field_sheet.csv``: one row per camera for ``ingest --field-sheet``, with the first
+  and last capture of the season (blank captures included) as the deployment period.
+  LILA does not publish camera coordinates, so every camera gets the park's approximate
+  position.
 
 Usage (with the ``detect`` extra installed):
 
     uv run python examples/kgalagadi/prepare.py kgalagadi
+    uv run camtraptools ingest kgalagadi/sd_cards --out kgalagadi/package \
+        --field-sheet kgalagadi/field_sheet.csv
 
 Snapshot Kgalagadi is published by Snapshot Safari on LILA BC under the Community
 Data License Agreement (permissive). Downloads resume: existing images are kept.
@@ -62,6 +68,7 @@ TAXA = {
     "wildebeestblue": ("Connochaetes taurinus", "Connochaetes", "Bovidae", "Artiodactyla", "Mammalia"),
 }
 SKIPPED_IMAGES = {"blank", "human"}
+PARK_LATITUDE, PARK_LONGITUDE = -25.5, 20.5
 
 
 def image_labels() -> pd.DataFrame:
@@ -104,6 +111,16 @@ def main(out: Path) -> None:
     truth[columns] = pd.DataFrame(truth["question__species"].map(TAXA).tolist(), index=truth.index)
     truth[["filePath", *columns]].to_csv(out / "truth.csv", index=False)
     print(f"Wrote {out / 'truth.csv'} with {len(truth)} labels")
+
+    labels["capturedAt"] = labels["capture_date_local"] + "T" + labels["capture_time_local"]
+    sheet = labels.groupby("site")["capturedAt"].agg(deploymentStart="min", deploymentEnd="max").reset_index()
+    sheet = sheet.rename(columns={"site": "deploymentID"})
+    sheet["locationName"] = "Kgalagadi " + sheet["deploymentID"]
+    sheet["latitude"], sheet["longitude"] = PARK_LATITUDE, PARK_LONGITUDE
+    sheet["deploymentComments"] = "Period from first and last capture; approximate park-level coordinates"
+    columns = ["deploymentID", "locationName", "latitude", "longitude", "deploymentStart", "deploymentEnd"]
+    sheet[[*columns, "deploymentComments"]].to_csv(out / "field_sheet.csv", index=False)
+    print(f"Wrote {out / 'field_sheet.csv'} for {len(sheet)} cameras")
 
 
 if __name__ == "__main__":

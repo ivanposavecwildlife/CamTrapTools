@@ -579,3 +579,34 @@ def test_detect_adapted_needs_images(make_image, tmp_path):
 
     assert result.exit_code == 1
     assert "--adapted needs --images" in result.output
+
+
+def test_ecology_command_reports_naive_occupancy(tmp_path):
+    from test_ecology import make_package
+
+    package = make_package(tmp_path)
+
+    result = runner.invoke(
+        app, ["ecology", str(package), "--out", str(tmp_path / "out"), "--taxon", "Vulpes chama", "--taxon", "Lynx lynx"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "2 sites, 3 occasions of 7 days from 2024-03-01, 17 camera days." in result.output
+    assert "No events of: Lynx lynx" in result.output
+    assert "Vulpes chama" in result.output
+
+
+def test_ecology_command_lists_left_out_events(tmp_path):
+    from test_ecology import make_package
+
+    result = runner.invoke(app, ["ecology", str(make_package(tmp_path)), "--out", str(tmp_path / "out")])
+
+    assert result.exit_code == 0, result.output
+    assert "Left out 2 events not identified to species: Bovidae (1), animal (unidentified) (1)" in result.output
+
+
+def test_ecology_command_needs_observations(tmp_path):
+    result = runner.invoke(app, ["ecology", str(tmp_path), "--out", str(tmp_path / "out")])
+
+    assert result.exit_code == 1
+    assert "no observations.csv" in result.output

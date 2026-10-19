@@ -178,7 +178,8 @@ Requires the `detect` extra and about 3 GB of disk space.
 
 ```bash
 uv run python examples/kgalagadi/prepare.py kgalagadi
-uv run camtraptools ingest kgalagadi/sd_cards --out kgalagadi/package
+uv run camtraptools ingest kgalagadi/sd_cards --out kgalagadi/package \
+    --field-sheet kgalagadi/field_sheet.csv
 uv run camtraptools detect kgalagadi/package --images kgalagadi/sd_cards --country ZAF
 uv run camtraptools events kgalagadi/package
 uv run camtraptools crops kgalagadi/package --images kgalagadi/sd_cards \

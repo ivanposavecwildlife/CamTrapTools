@@ -13,6 +13,7 @@ from camtraptools import (
     check,
     crops,
     detect,
+    ecology,
     evaluate,
     events,
     export,
@@ -605,3 +606,51 @@ def adapt_cmd(
             f"on validation as SpeciesNet's species answers ({summary['speciesnetPrecision']:.0%})."
         )
     typer.echo(f"\nWrote {out / adapt.MODEL_FILE} and {out / adapt.PREDICTIONS_FILE}")
+
+
+@app.command("ecology")
+def ecology_cmd(
+    package: Annotated[
+        Path,
+        typer.Argument(exists=True, file_okay=False, help="Package folder with events from `camtraptools events`."),
+    ],
+    out: Annotated[Path, typer.Option(help="Folder for the detection histories, effort and occupancy tables.")],
+    occasion_days: Annotated[
+        int, typer.Option(min=1, help="Days per sampling occasion in the detection histories.")
+    ] = ecology.DEFAULT_OCCASION_DAYS,
+    taxon: Annotated[
+        list[str] | None, typer.Option(help="Only this taxon (scientific name); repeat for several.")
+    ] = None,
+    all_taxa: Annotated[bool, typer.Option(help="Include higher taxa such as Bovidae, not only species.")] = False,
+) -> None:
+    """Build detection histories per species and report naive occupancy."""
+    if not (package / detect.OBSERVATIONS_FILE).exists():
+        typer.echo(f"Error: no observations.csv in {package}; run `camtraptools detect` first.", err=True)
+        raise typer.Exit(1)
+    try:
+        summary, left_out = ecology.run(package, out, occasion_days, taxon, all_taxa)
+    except ValueError as error:
+        typer.echo(f"Error: {error}", err=True)
+        raise typer.Exit(1) from error
+    effort = pd.read_csv(out / ecology.EFFORT_FILE, index_col="site")
+    typer.echo(
+        f"{len(effort)} sites, {len(effort.columns)} occasions of {occasion_days} days from {effort.columns[0]}, "
+        f"{int(effort.to_numpy().sum())} camera days."
+    )
+    missing = sorted(set(taxon or []) - set(summary.index))
+    if missing:
+        typer.echo(f"No events of: {', '.join(missing)}")
+    if summary.empty:
+        typer.echo("No animal events to analyse.")
+        raise typer.Exit(1)
+    typer.echo("\nNaive occupancy (share of surveyed sites where the taxon was recorded):")
+    typer.echo(summary.to_string(na_rep="–"))
+    if not left_out.empty and not taxon:
+        reason = "not identified to species" if not all_taxa else "not identified"
+        typer.echo(f"\nLeft out {crops.plural(int(left_out.sum()), 'event')} {reason}: "
+                   + ", ".join(f"{name} ({count})" for name, count in left_out.head(8).items()))
+    typer.echo(
+        "\nNaive occupancy assumes a species is never missed where it is present; "
+        "a low detection rate means it often is."
+    )
+    typer.echo(f"Wrote {out / ecology.SUMMARY_FILE}, {out / ecology.EFFORT_FILE} and {out / ecology.HISTORIES_FOLDER}/")

@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `ecology` command: writes a detection history per species (sites by sampling
+  occasions of `--occasion-days`, default 7, with 1 for recorded, 0 for not recorded and
+  empty when no camera was running), the camera days per site and occasion
+  (`effort.csv`) and naive occupancy per species (`occupancy.csv`): events, sites
+  recorded out of sites surveyed, and the share of surveyed occasions with a record at
+  those sites. Sites are camera locations, reviewed decisions replace the AI's, and
+  events identified only to a higher taxon are left out and listed unless `--all-taxa`
+  or `--taxon` is given.
+- `examples/kgalagadi/prepare.py` also writes a field sheet with each camera's season,
+  from its first and last capture including blank ones.
+
 ## [0.4.0] - 2026-10-19
 
 Evaluation and regional adaptation: measure the AI against ground truth, build crop
