@@ -623,7 +623,7 @@ def ecology_cmd(
     ] = None,
     all_taxa: Annotated[bool, typer.Option(help="Include higher taxa such as Bovidae, not only species.")] = False,
 ) -> None:
-    """Build detection histories per species and report naive occupancy."""
+    """Build detection histories per species and estimate occupancy, naive and modelled."""
     if not (package / detect.OBSERVATIONS_FILE).exists():
         typer.echo(f"Error: no observations.csv in {package}; run `camtraptools detect` first.", err=True)
         raise typer.Exit(1)
@@ -644,13 +644,28 @@ def ecology_cmd(
         typer.echo("No animal events to analyse.")
         raise typer.Exit(1)
     typer.echo("\nNaive occupancy (share of surveyed sites where the taxon was recorded):")
-    typer.echo(summary.to_string(na_rep="–"))
+    naive = ["events", "sitesDetected", "sitesSurveyed", "naiveOccupancy", "detectionRate"]
+    typer.echo(summary[naive].to_string(na_rep="–"))
+    modelled = summary.dropna(subset=["occupancy"]) if "occupancy" in summary.columns else summary.iloc[0:0]
+    if not modelled.empty:
+        table = modelled[["naiveOccupancy", "occupancy"]].copy()
+        table["95% interval"] = [
+            f"{low:.2f}–{high:.2f}" for low, high in zip(modelled["occupancyLower"], modelled["occupancyUpper"], strict=True)
+        ]
+        table["detectionPerOccasion"] = modelled["detectionPerOccasion"]
+        table["missedAtOccupiedSite"] = modelled["missedAtOccupiedSite"]
+        table["warning"] = modelled["warning"].map(lambda text: f"⚠ {text}" if isinstance(text, str) else "")
+        typer.echo(
+            f"\nOccupancy model (taxa recorded at {ecology.MIN_SITES_FOR_MODEL} or more sites), "
+            "correcting for the species being missed where it is present:"
+        )
+        typer.echo(table.to_string())
+        typer.echo(
+            "detectionPerOccasion: chance of recording the species in one full occasion where it is present; "
+            "missedAtOccupiedSite: chance of never recording it over the survey."
+        )
     if not left_out.empty and not taxon:
         reason = "not identified to species" if not all_taxa else "not identified"
         typer.echo(f"\nLeft out {crops.plural(int(left_out.sum()), 'event')} {reason}: "
                    + ", ".join(f"{name} ({count})" for name, count in left_out.head(8).items()))
-    typer.echo(
-        "\nNaive occupancy assumes a species is never missed where it is present; "
-        "a low detection rate means it often is."
-    )
     typer.echo(f"Wrote {out / ecology.SUMMARY_FILE}, {out / ecology.EFFORT_FILE} and {out / ecology.HISTORIES_FOLDER}/")

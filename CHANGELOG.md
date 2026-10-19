@@ -16,6 +16,13 @@ All notable changes to this project are documented here. The format follows
   those sites. Sites are camera locations, reviewed decisions replace the AI's, and
   events identified only to a higher taxon are left out and listed unless `--all-taxa`
   or `--taxon` is given.
+- Occupancy model in `ecology`: for each species recorded at three or more sites, the
+  single-season occupancy model (MacKenzie et al. 2002) estimates the probability that
+  a site is occupied, with a 95% profile-likelihood interval, from a daily detection
+  probability applied to each occasion's camera days. `occupancy.csv` and the printed
+  table add the chance of recording the species in a full occasion and of missing it
+  over the whole survey at an occupied site, with a warning when detection is too rare
+  to estimate occupancy or the interval is wider than 0.5.
 - `examples/kgalagadi/prepare.py` also writes a field sheet with each camera's season,
   from its first and last capture including blank ones.
 

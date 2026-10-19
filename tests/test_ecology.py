@@ -1,5 +1,6 @@
 from datetime import date
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -111,6 +112,7 @@ def test_run_writes_histories_effort_and_summary(tmp_path):
 
     assert summary.index.tolist() == ["Vulpes chama"]
     assert summary.loc["Vulpes chama", "naiveOccupancy"] == 1.0
+    assert pd.isna(summary.loc["Vulpes chama", "occupancy"])
     assert left_out.to_dict() == {"Bovidae": 1, "animal (unidentified)": 1}
     history = pd.read_csv(tmp_path / "out" / "histories" / "Vulpes_chama.csv", index_col="site")
     assert history.loc["North"].tolist()[:2] == [1, 0]
@@ -135,3 +137,72 @@ def test_run_uses_reviewed_decisions(tmp_path):
     summary, _ = ecology.run(package, tmp_path / "out")
 
     assert summary.loc["Raphicerus campestris", "sitesDetected"] == 1
+
+
+def test_log_likelihood_matches_hand_calculation():
+    detections = np.array([[1.0, np.nan], [0.0, 0.0]])
+    days = np.array([[1.0, 0.0], [1.0, 2.0]])
+
+    # psi = 0.5 and daily q = 0.5: site 1 is 0.5 * 0.5; site 2 is 0.5 * 0.5 * 0.25 + 0.5
+    expected = np.log(0.25) + np.log(0.5 * 0.5 * 0.25 + 0.5)
+
+    assert ecology.log_likelihood(np.array([0.0, 0.0]), detections, days) == pytest.approx(expected)
+
+
+def simulated_history(seed, sites=80, occasions=8, psi=0.4, daily=0.06):
+    rng = np.random.default_rng(seed)
+    days = rng.choice([0.0, 4.0, 7.0, 7.0], size=(sites, occasions))
+    occupied = rng.random(sites) < psi
+    recorded = (rng.random((sites, occasions)) < 1 - (1 - daily) ** days) & occupied[:, None]
+    columns = [f"o{number}" for number in range(occasions)]
+    history = pd.DataFrame(np.where(days > 0, recorded.astype(float), np.nan), columns=columns).astype("Int64")
+    return history, pd.DataFrame(days, columns=columns)
+
+
+def test_fit_occupancy_recovers_simulated_values():
+    history, effort = simulated_history(seed=3)
+
+    result = ecology.fit_occupancy(history, effort, occasion_days=7)
+
+    assert result["occupancyLower"] < 0.4 < result["occupancyUpper"]
+    assert result["occupancy"] == pytest.approx(0.4, abs=0.1)
+    assert result["detectionPerOccasion"] == pytest.approx(1 - 0.94**7, abs=0.1)
+    assert result["occupancy"] > history.eq(1).any(axis=1).mean()
+    assert result["warning"] is None
+
+
+def test_fit_occupancy_flags_detection_too_rare():
+    history = pd.DataFrame({"o1": [1, 0, 0, 0, 0, 0], "o2": [0, 1, 0, 0, 0, 0], "o3": [0, 0, 1, 0, 0, 0]})
+    effort = pd.DataFrame(7, index=history.index, columns=history.columns)
+
+    result = ecology.fit_occupancy(history.astype("Int64"), effort, occasion_days=7)
+
+    assert result["occupancyUpper"] == 1.0
+    assert result["warning"] in {"detection too rare to estimate", "wide interval"}
+
+
+@pytest.mark.parametrize(
+    ("occupancy", "lower", "upper", "expected"),
+    [
+        (0.995, 0.4, 1.0, "detection too rare to estimate"),
+        (0.5, 0.2, 0.9, "wide interval"),
+        (0.5, 0.35, 0.7, None),
+    ],
+)
+def test_occupancy_warning(occupancy, lower, upper, expected):
+    result = {"occupancy": occupancy, "occupancyLower": lower, "occupancyUpper": upper}
+
+    assert ecology.occupancy_warning(result) == expected
+
+
+def test_occupancy_models_skip_taxa_at_few_sites():
+    history, effort = simulated_history(seed=5)
+    rare = history.copy()
+    rare[:] = 0
+    rare.iloc[0, 0] = 1
+    rare = rare.where(history.notna())
+
+    models = ecology.occupancy_models({"common": history, "rare": rare}, effort, occasion_days=7)
+
+    assert models.index.tolist() == ["common"]
+    assert {"occupancy", "occupancyLower", "occupancyUpper", "warning"} <= set(models.columns)

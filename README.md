@@ -92,8 +92,12 @@ flash (`cam_noflash`) and clock errors.*
   sampling occasions of `--occasion-days`, default 7: recorded, not recorded, or camera
   not running), the sampling effort per site and occasion, and naive occupancy: the
   share of surveyed sites where each species was recorded, with its weekly detection
-  rate. Reviewed decisions replace the AI's, and higher taxa are left out unless asked
-  for (`--all-taxa`, `--taxon`).
+  rate. For species recorded at three or more sites, an occupancy model (MacKenzie et
+  al. 2002) corrects for animals being missed where they are present: it estimates
+  occupancy with a 95% profile-likelihood interval and the chance of recording the
+  species per occasion, using each occasion's camera days, and warns when detections are
+  too rare for a reliable estimate. Reviewed decisions replace the AI's, and higher
+  taxa are left out unless asked for (`--all-taxa`, `--taxon`).
 - **`export`**: writes a complete Camtrap DP 1.0.2 package (`datapackage.json` and three
   tables) with time zones, coverage, contributors and licenses, using the reviewer's
   decision wherever an event was reviewed. Exported packages pass

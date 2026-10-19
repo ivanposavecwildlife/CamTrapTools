@@ -610,3 +610,31 @@ def test_ecology_command_needs_observations(tmp_path):
 
     assert result.exit_code == 1
     assert "no observations.csv" in result.output
+
+
+def test_ecology_command_reports_occupancy_model(tmp_path):
+    from test_ecology import make_package
+
+    package = make_package(tmp_path)
+    observations = pd.read_csv(package / "observations.csv")
+    deployments = pd.DataFrame(
+        {
+            "deploymentID": [f"cam{number}" for number in range(8)],
+            "deploymentStart": "2024-03-01T12:00:00",
+            "deploymentEnd": "2024-03-28T12:00:00",
+        }
+    )
+    deployments.to_csv(package / "deployments.csv", index=False)
+    events = observations.iloc[[0] * 6].assign(
+        deploymentID=["cam0", "cam0", "cam1", "cam2", "cam3", "cam3"],
+        eventID=[f"e{number}" for number in range(6)],
+        eventStart=["2024-03-02", "2024-03-20", "2024-03-09", "2024-03-16", "2024-03-03", "2024-03-25"],
+    )
+    events.to_csv(package / "observations.csv", index=False)
+
+    result = runner.invoke(app, ["ecology", str(package), "--out", str(tmp_path / "out")])
+
+    assert result.exit_code == 0, result.output
+    assert "Occupancy model (taxa recorded at 3 or more sites)" in result.output
+    assert "95% interval" in result.output
+    assert "missedAtOccupiedSite" in result.output
