@@ -13,8 +13,14 @@ cameras that died, fell over or had their clock reset, and nobody notices until 
 analysis is already wrong.
 
 CamTrapTools turns a folder of SD-card images into a standard
-[Camtrap DP](https://camtrap-dp.tdwg.org) data package, checks every camera for problems
-and produces a report a field team can act on.
+[Camtrap DP](https://camtrap-dp.tdwg.org) data package, checks every camera for problems,
+finds and identifies animals with [SpeciesNet](https://github.com/google/cameratrapai),
+counts independent visits, and exports a validated package ready to publish on
+[GBIF](https://www.gbif.org).
+
+```
+SD cards ─► ingest ─► check / report ─► detect (or import) ─► events ─► export ─► GBIF
+```
 
 ![Camera health report showing a timeline per camera with highlighted gaps](docs/report.png)
 
@@ -44,20 +50,44 @@ flash (`cam_noflash`) and clock errors.*
 - **`report`**: a single self-contained HTML page with headline numbers, an interactive
   timeline, a summary table and all issues. It works offline, supports dark mode and can
   be emailed as one file.
+- **`detect`**: runs SpeciesNet, which finds animals, people and vehicles with
+  MegaDetector v5a and identifies each animal, with geofencing by country
+  (`--country ZAF`). Observations record the species (or a higher taxon such as *Bovidae*
+  when the model is unsure), bounding box, confidence and model version. Changing
+  `--threshold` reuses existing results instantly.
+- **`events`**: groups images into independent visits (30-minute rule, adjustable with
+  `--gap`), chooses each visit's species by a confidence-weighted vote across its images,
+  counts the most animals seen in any single image, and prints visits per species and
+  camera.
+- **`import`**: reads results from MegaDetector, AddaxAI, Timelapse or SpeciesNet, even
+  when their image paths are relative to a different folder, so teams can adopt
+  CamTrapTools mid-project without re-running the AI.
+- **`export`**: writes a complete Camtrap DP 1.0.2 package (`datapackage.json` and three
+  tables) with time zones, coverage, contributors and licenses. Exported packages pass
+  [Frictionless](https://framework.frictionlessdata.io/) validation against the official
+  Camtrap DP profile.
 
 ## Quick start
 
-Requires [uv](https://docs.astral.sh/uv/).
+Requires [uv](https://docs.astral.sh/uv/). The `detect` extra installs SpeciesNet and
+PyTorch (about 1 GB); leave it out if you only need the quality checks.
 
 ```bash
-uv tool install git+https://github.com/ivanposavecwildlife/CamTrapTools
+uv tool install "camtraptools[detect] @ git+https://github.com/ivanposavecwildlife/CamTrapTools"
 ```
 
 ```bash
 camtraptools ingest sd_cards --out my_project --field-sheet field_sheet.xlsx
 camtraptools check my_project
 camtraptools report my_project --out report.html
+camtraptools detect my_project --images sd_cards --country ZAF
+camtraptools events my_project
+camtraptools export my_project --out publish --title "My survey" \
+    --contributor "Your Name" --timezone Africa/Johannesburg
 ```
+
+Already have results from another tool? Replace `detect` with
+`camtraptools import my_project results.json`.
 
 ### Input layout
 
@@ -81,7 +111,7 @@ A CSV or Excel file with one row per deployment. Column names follow Camtrap DP.
 | any other Camtrap DP column | no | `locationName`, `cameraModel`, `cameraHeight`, `deploymentComments` |
 
 Recorded start and end times take priority over the first and last image, which usually
-underestimate how long a camera was running.
+underestimate how long a camera was running. Coordinates are required for `export`.
 
 ## Validated on real data
 
@@ -94,6 +124,16 @@ Tested on four deployments from
   take priority.
 - The default thresholds raise **no false alarms** on these desert cameras, where
   10–19 days without an animal is normal.
+- At the default 0.2 threshold, the detector found all **50 of 50** captures with
+  animals and all **26 of 26** empty captures were recognised as blank.
+- SpeciesNet named **38 of 50** animal captures correctly to species, **10** correctly
+  at a higher level (e.g. *Bovidae*, *Hyaenidae*), and got **2** wrong (a grey duiker
+  as steenbok, a Cape fox as *Bovidae*). A close-up of jackal fur was called a vervet
+  monkey with 94% confidence, a reminder that confidence is not accuracy.
+- **194 images became 60 independent events**; at one camera, 64 gemsbok images were
+  11 separate visits.
+- Results imported from LILA's published MegaDetector run matched the toolkit's own
+  detections, and every exported package passes Camtrap DP validation.
 
 ## Roadmap
 
@@ -106,7 +146,7 @@ SD card ─► ingest/check ─► detect/events ─► review ─► ecology �
 | Module | Commands | Purpose | Status |
 |---|---|---|---|
 | Ingest & QA | `ingest`, `check`, `report` | Build the data package, find camera problems, report them | ✅ v0.1.0 |
-| Detection | `detect`, `events`, `import` | MegaDetector and SpeciesNet inference, grouping images into independent events, importing existing outputs | Planned |
+| Detection | `detect`, `events`, `import`, `export` | SpeciesNet detection and species identification, independent events, importing other tools' results, validated Camtrap DP export | ✅ v0.2.0 |
 | Review | `review` | Local web app for checking AI labels, least confident first | Planned |
 | Evaluation | `evaluate`, `adapt` | Per-species accuracy and confidence thresholds; regional fine-tuning | Planned |
 | Ecology | `ecology` | Occupancy and activity analysis, and how sensitive results are to AI errors | Planned |
@@ -116,15 +156,19 @@ SD card ─► ingest/check ─► detect/events ─► review ─► ecology �
 ```bash
 git clone https://github.com/ivanposavecwildlife/CamTrapTools
 cd CamTrapTools
-uv sync
+uv sync --extra detect
 uv run ruff check src tests
 uv run pytest
 ```
 
-CI runs the linter and tests on Python 3.11–3.14 (Linux) and on Windows and macOS.
+CI runs the linter and tests on Python 3.11–3.14 (Linux) and on Windows and macOS,
+without the `detect` extra: tests use stand-ins for SpeciesNet, so CI never downloads
+the models.
 
 ## License
 
-[MIT](LICENSE). Snapshot Kgalagadi data used for validation is published by
+[MIT](LICENSE). The optional `detect` extra installs
+[SpeciesNet](https://github.com/google/cameratrapai) (Apache-2.0), whose MegaDetector
+inference code is GPL-licensed. Snapshot Kgalagadi data used for validation is published by
 [Snapshot Safari](https://lila.science/datasets/snapshot-kgalagadi/) under the
 Community Data License Agreement (permissive) and is not included in this repository.
