@@ -27,6 +27,9 @@ All notable changes to this project are documented here. The format follows
   and keyboard shortcuts: Enter or A to save, B for blank, 1–9 for the count, S for the
   species field and the arrow keys to move between events.
 - `review` uses another port when the requested one is in use, and says so.
+- `review-stats` command: reviewed events, agreement with the AI, each correction (AI →
+  reviewer), changes per AI confidence band and review speed (pauses over ten minutes
+  count as breaks).
 
 ## [0.2.0] - 2026-10-19
 

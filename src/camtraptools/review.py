@@ -13,6 +13,7 @@ from jinja2 import Environment, PackageLoader, select_autoescape
 
 from camtraptools import reviews
 from camtraptools.detect import OBSERVATIONS_FILE, RESULTS_FILE, parse_taxon
+from camtraptools.reviews import ORDERS, event_confidence, order_events  # noqa: F401
 
 templates = Environment(loader=PackageLoader("camtraptools"), autoescape=select_autoescape())
 
@@ -40,43 +41,6 @@ def common_names(package_dir: Path) -> dict[str, str]:
                 if scientific_name:
                     names[scientific_name] = common_name
     return names
-
-
-ORDERS = ["uncertainty", "time"]
-
-
-def event_confidence(event: pd.Series, media_observations: pd.DataFrame) -> float:
-    """Return how confident the AI was about an event, from 0 to 1.
-
-    It is the event's vote share times the best classifier probability for the
-    chosen label. Unknown events score 0, and animals not identified to species
-    are capped at 0.5, so the events most likely to need a human come first.
-    """
-    if event["observationType"] in ("unknown", "unclassified"):
-        return 0.0
-    matching = media_observations[media_observations["observationType"] == event["observationType"]]
-    if event["observationType"] == "animal":
-        matching = matching[matching["scientificName"].fillna("") == (event["scientificName"] if isinstance(event["scientificName"], str) else "")]
-    probabilities = pd.to_numeric(matching["classificationProbability"]).dropna()
-    best = probabilities.max() if not probabilities.empty else (1.0 if event["observationType"] == "blank" else 0.5)
-    share = pd.to_numeric(pd.Series([event["classificationProbability"]])).fillna(1.0).iloc[0]
-    confidence = float(share * best)
-    if event["observationType"] == "animal" and " " not in str(event["scientificName"] if isinstance(event["scientificName"], str) else ""):
-        confidence = min(confidence, 0.5)
-    return round(confidence, 3)
-
-
-def order_events(events: pd.DataFrame, observations: pd.DataFrame, order: str) -> pd.DataFrame:
-    """Return the events with a ``confidence`` column, sorted for review: least
-    confident first (``uncertainty``) or by start time (``time``)."""
-    media_level = observations[observations["observationLevel"] == "media"]
-    by_event = dict(list(media_level.groupby("eventID")))
-    empty = media_level.iloc[0:0]
-    events = events.assign(
-        confidence=[event_confidence(event, by_event.get(event["eventID"], empty)) for _, event in events.iterrows()]
-    )
-    columns = ["confidence", "eventStart", "eventID"] if order == "uncertainty" else ["eventStart", "eventID"]
-    return events.sort_values(columns).reset_index(drop=True)
 
 
 def free_port(preferred: int) -> int:

@@ -349,3 +349,39 @@ def review_cmd(
     if open_browser:
         Timer(1.0, webbrowser.open, [url]).start()
     uvicorn.run(app_, host="127.0.0.1", port=port, log_level="warning")
+
+
+@app.command("review-stats")
+def review_stats_cmd(
+    package: Annotated[
+        Path,
+        typer.Argument(exists=True, file_okay=False, help="Package folder with reviews from `camtraptools review`."),
+    ],
+) -> None:
+    """Summarize review progress, agreement with the AI and review speed."""
+    from camtraptools import reviews as review_data
+
+    if not (package / review_data.REVIEWS_FILE).exists():
+        typer.echo(f"No reviews in {package} yet; start with `camtraptools review`.")
+        raise typer.Exit(0)
+    compared = review_data.compare_with_machine(package)
+    observations = pd.read_csv(package / detect.OBSERVATIONS_FILE, dtype=str)
+    total = ((observations["observationLevel"] == "event") & (observations["classificationMethod"] != "human")).sum()
+    agreed = (compared["outcome"] == "agreed").sum()
+    typer.echo(f"Reviewed {len(compared)} of {total} events; agreed with the AI on {agreed} ({agreed / len(compared):.0%}).")
+    changes = compared["outcome"].value_counts().drop("agreed", errors="ignore")
+    if not changes.empty:
+        typer.echo("\nChanges:")
+        for outcome, count in changes.items():
+            typer.echo(f"  {outcome}: {count}")
+        changed = compared[compared["outcome"] != "agreed"]
+        typer.echo("\nCorrections (AI → reviewer):")
+        for row in changed.itertuples():
+            before = row.scientificNameAI if isinstance(row.scientificNameAI, str) else row.observationTypeAI
+            after = row.scientificName if isinstance(row.scientificName, str) else row.observationType
+            typer.echo(f"  {row.eventID}: {before} → {after}")
+    typer.echo("\nBy AI confidence:")
+    typer.echo(review_data.summarize_by_confidence(compared).to_string())
+    speed = review_data.review_speed(compared["reviewedAt"])
+    if speed["perMinute"]:
+        typer.echo(f"\nSpeed: {speed['perMinute']} decisions per minute over {speed['minutes']} active minutes.")

@@ -374,3 +374,30 @@ def test_review_command_rejects_unknown_order(make_image, tmp_path):
 
     assert result.exit_code == 1
     assert "--order must be one of: uncertainty, time" in result.output
+
+
+def test_review_stats_command_without_reviews(make_image, tmp_path):
+    make_image("images/camera_A/IMG_0001.JPG")
+    runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")])
+
+    result = runner.invoke(app, ["review-stats", str(tmp_path / "package")])
+
+    assert result.exit_code == 0
+    assert "No reviews" in result.output
+
+
+def test_review_stats_command_reports_corrections(make_image, tmp_path):
+    from camtraptools import reviews
+
+    make_image("images/camera_A/IMG_0001.JPG", date_time_original="2024:03:01 06:00:00")
+    runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")])
+    write_speciesnet_results(tmp_path / "package", 0.9)
+    runner.invoke(app, ["detect", str(tmp_path / "package")])
+    runner.invoke(app, ["events", str(tmp_path / "package")])
+    reviews.save_review(tmp_path / "package", "camera_A-0001", "animal", "Canis mesomelas", 1, "Ivan Posavec")
+
+    result = runner.invoke(app, ["review-stats", str(tmp_path / "package")])
+
+    assert result.exit_code == 0
+    assert "Reviewed 1 of 1 events; agreed with the AI on 0 (0%)." in result.output
+    assert "camera_A-0001: Oryx gazella → Canis mesomelas" in result.output

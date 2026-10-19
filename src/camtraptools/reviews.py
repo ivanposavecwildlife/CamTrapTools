@@ -104,3 +104,89 @@ def prefer_human(observations: pd.DataFrame) -> pd.DataFrame:
         & observations["eventID"].isin(human_events)
     )
     return observations[~replaced]
+
+
+ORDERS = ["uncertainty", "time"]
+
+
+def event_confidence(event: pd.Series, media_observations: pd.DataFrame) -> float:
+    """Return how confident the AI was about an event, from 0 to 1.
+
+    It is the event's vote share times the best classifier probability for the
+    chosen label. Unknown events score 0, and animals not identified to species
+    are capped at 0.5, so the events most likely to need a human come first.
+    """
+    if event["observationType"] in ("unknown", "unclassified"):
+        return 0.0
+    matching = media_observations[media_observations["observationType"] == event["observationType"]]
+    if event["observationType"] == "animal":
+        matching = matching[matching["scientificName"].fillna("") == (event["scientificName"] if isinstance(event["scientificName"], str) else "")]
+    probabilities = pd.to_numeric(matching["classificationProbability"]).dropna()
+    best = probabilities.max() if not probabilities.empty else (1.0 if event["observationType"] == "blank" else 0.5)
+    share = pd.to_numeric(pd.Series([event["classificationProbability"]])).fillna(1.0).iloc[0]
+    confidence = float(share * best)
+    if event["observationType"] == "animal" and " " not in str(event["scientificName"] if isinstance(event["scientificName"], str) else ""):
+        confidence = min(confidence, 0.5)
+    return round(confidence, 3)
+
+
+def order_events(events: pd.DataFrame, observations: pd.DataFrame, order: str) -> pd.DataFrame:
+    """Return the events with a ``confidence`` column, sorted for review: least
+    confident first (``uncertainty``) or by start time (``time``)."""
+    media_level = observations[observations["observationLevel"] == "media"]
+    by_event = dict(list(media_level.groupby("eventID")))
+    empty = media_level.iloc[0:0]
+    events = events.assign(
+        confidence=[event_confidence(event, by_event.get(event["eventID"], empty)) for _, event in events.iterrows()]
+    )
+    columns = ["confidence", "eventStart", "eventID"] if order == "uncertainty" else ["eventStart", "eventID"]
+    return events.sort_values(columns).reset_index(drop=True)
+
+
+CONFIDENCE_BANDS = [(0.0, 0.6, "below 0.6"), (0.6, 0.95, "0.6 to 0.95"), (0.95, 1.01, "0.95 and up")]
+BREAK_SECONDS = 600
+
+
+def compare_with_machine(package_dir: Path) -> pd.DataFrame:
+    """Return one row per reviewed event with the AI's decision and confidence, the
+    human decision, and the outcome: agreed, changed type, changed species or
+    changed count."""
+    observations = pd.read_csv(package_dir / OBSERVATIONS_FILE, dtype=str)
+    machine = observations[observations["classificationMethod"] != "human"]
+    events = order_events(machine[machine["observationLevel"] == "event"], machine, "uncertainty")
+    events = events[["eventID", "observationType", "scientificName", "count", "confidence"]]
+    compared = load_reviews(package_dir).merge(events, on="eventID", suffixes=("", "AI"))
+    same_type = compared["observationType"] == compared["observationTypeAI"]
+    same_name = compared["scientificName"].fillna("") == compared["scientificNameAI"].fillna("")
+    same_count = compared["count"].fillna("") == compared["countAI"].fillna("")
+    compared["outcome"] = "agreed"
+    compared.loc[~same_count, "outcome"] = "changed count"
+    compared.loc[~same_name, "outcome"] = "changed species"
+    compared.loc[~same_type, "outcome"] = "changed type"
+    return compared
+
+
+def review_speed(reviewed_at: pd.Series) -> dict:
+    """Return the number of decisions, minutes spent and decisions per minute.
+
+    Pauses longer than ten minutes between decisions count as breaks.
+    """
+    times = pd.to_datetime(reviewed_at, format="ISO8601", utc=True).sort_values()
+    gaps = times.diff().dt.total_seconds().dropna()
+    active = gaps[gaps <= BREAK_SECONDS]
+    minutes = float(active.sum()) / 60
+    return {
+        "decisions": len(times),
+        "minutes": round(minutes, 1),
+        "perMinute": round(len(active) / minutes, 1) if minutes else None,
+    }
+
+
+def summarize_by_confidence(compared: pd.DataFrame) -> pd.DataFrame:
+    """Return, per AI confidence band, how many events were reviewed and how many
+    the reviewer changed."""
+    rows = []
+    for low, high, label in CONFIDENCE_BANDS:
+        band = compared[(compared["confidence"] >= low) & (compared["confidence"] < high)]
+        rows.append({"confidence": label, "reviewed": len(band), "changed": int((band["outcome"] != "agreed").sum())})
+    return pd.DataFrame(rows).set_index("confidence")
