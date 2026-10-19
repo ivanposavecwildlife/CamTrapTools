@@ -1,6 +1,7 @@
 import json
 import sys
 
+import pytest
 from typer.testing import CliRunner
 
 from camtraptools import __version__
@@ -256,3 +257,60 @@ def test_import_command_rejects_unrelated_results(make_image, tmp_path):
 
     assert result.exit_code == 1
     assert "none of the images in md.json are in the package" in result.output
+
+
+def test_export_command_writes_package(make_image, tmp_path):
+    make_image("images/camera_A/IMG_0001.JPG", date_time_original="2024:03:01 06:00:00")
+    sheet = tmp_path / "sheet.csv"
+    sheet.write_text("deploymentID,latitude,longitude\ncamera_A,52.7,23.85\n")
+    runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package"), "--field-sheet", str(sheet)])
+    write_speciesnet_results(tmp_path / "package", 0.9)
+    runner.invoke(app, ["detect", str(tmp_path / "package")])
+
+    result = runner.invoke(
+        app,
+        [
+            "export", str(tmp_path / "package"), "--out", str(tmp_path / "dp"), "--title", "Test",
+            "--contributor", "Ivan Posavec", "--timezone", "Africa/Johannesburg",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Wrote a Camtrap DP 1.0.2 data package" in result.output
+    assert (tmp_path / "dp/datapackage.json").exists()
+
+
+@pytest.mark.parametrize(
+    ("options", "message"),
+    [
+        (["--timezone", "Mars/Olympus"], "unknown time zone 'Mars/Olympus'"),
+        (["--timezone", "UTC", "--sampling-design", "random"], "--sampling-design must be one of"),
+    ],
+)
+def test_export_command_rejects_bad_options(make_image, tmp_path, options, message):
+    make_image("images/camera_A/IMG_0001.JPG", date_time_original="2024:03:01 06:00:00")
+    runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")])
+    write_speciesnet_results(tmp_path / "package", 0.9)
+    runner.invoke(app, ["detect", str(tmp_path / "package")])
+
+    result = runner.invoke(
+        app, ["export", str(tmp_path / "package"), "--out", str(tmp_path / "dp"), "--title", "T", "--contributor", "I", *options]
+    )
+
+    assert result.exit_code == 1
+    assert message in result.output
+
+
+def test_export_command_needs_coordinates(make_image, tmp_path):
+    make_image("images/camera_A/IMG_0001.JPG", date_time_original="2024:03:01 06:00:00")
+    runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")])
+    write_speciesnet_results(tmp_path / "package", 0.9)
+    runner.invoke(app, ["detect", str(tmp_path / "package")])
+
+    result = runner.invoke(
+        app,
+        ["export", str(tmp_path / "package"), "--out", str(tmp_path / "dp"), "--title", "T", "--contributor", "I", "--timezone", "UTC"],
+    )
+
+    assert result.exit_code == 1
+    assert "deployments without coordinates: camera_A" in result.output

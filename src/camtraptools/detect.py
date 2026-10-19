@@ -44,7 +44,7 @@ def run(
         "model": model,
         "country": country,
         "admin1_region": admin1_region,
-        "completion_time": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+        "completion_time": datetime.now().astimezone().isoformat(timespec="seconds"),
     }
     results_file = package_dir / RESULTS_FILE
     results_file.write_text(json.dumps(predictions, indent=1), encoding="utf-8")

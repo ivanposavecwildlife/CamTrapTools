@@ -2,11 +2,21 @@
 
 from pathlib import Path
 from typing import Annotated
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import pandas as pd
 import typer
 
-from camtraptools import __version__, check, detect, events, importer, ingest, report
+from camtraptools import (
+    __version__,
+    check,
+    detect,
+    events,
+    export,
+    importer,
+    ingest,
+    report,
+)
 
 app = typer.Typer(
     help="CamTrapTools: camera-trap toolkit, from SD card to ecological answers."
@@ -246,3 +256,47 @@ def events_cmd(
         typer.echo("\nIndependent animal events per taxon:")
         typer.echo(table.to_string())
     typer.echo(f"Wrote {package / detect.OBSERVATIONS_FILE}")
+
+
+@app.command("export")
+def export_cmd(
+    package: Annotated[
+        Path,
+        typer.Argument(exists=True, file_okay=False, help="Package folder with observations from `detect` or `import`."),
+    ],
+    out: Annotated[Path, typer.Option(help="Folder for the Camtrap DP data package.")],
+    title: Annotated[str, typer.Option(help="Title of the project.")],
+    contributor: Annotated[
+        list[str], typer.Option(help="Contributor name; repeat for several. The first is the contact.")
+    ],
+    timezone: Annotated[
+        str, typer.Option(help="Time zone the camera clocks were set to, e.g. Africa/Johannesburg or Europe/Zagreb.")
+    ],
+    sampling_design: Annotated[
+        str, typer.Option(help=f"One of: {', '.join(export.SAMPLING_DESIGNS)}.")
+    ] = "opportunistic",
+    license: Annotated[str, typer.Option(help="License of the data, e.g. CC0-1.0 or CC-BY-4.0.")] = "CC-BY-4.0",
+    media_license: Annotated[str, typer.Option(help="License of the images.")] = "CC-BY-4.0",
+) -> None:
+    """Write a complete Camtrap DP data package, ready to validate and publish."""
+    if not (package / detect.OBSERVATIONS_FILE).exists():
+        typer.echo(f"Error: no observations.csv in {package}; run `camtraptools detect` or `import` first.", err=True)
+        raise typer.Exit(1)
+    if sampling_design not in export.SAMPLING_DESIGNS:
+        typer.echo(f"Error: --sampling-design must be one of: {', '.join(export.SAMPLING_DESIGNS)}.", err=True)
+        raise typer.Exit(1)
+    try:
+        ZoneInfo(timezone)
+    except ZoneInfoNotFoundError:
+        typer.echo(f"Error: unknown time zone {timezone!r}; use a name such as Africa/Johannesburg.", err=True)
+        raise typer.Exit(1)
+    try:
+        left_out = export.run(package, out, title, contributor, timezone, sampling_design, license, media_license)
+    except ValueError as error:
+        typer.echo(f"Error: {error}", err=True)
+        raise typer.Exit(1)
+    if left_out["media_without_timestamp"]:
+        typer.echo(f"Left out {left_out['media_without_timestamp']} images without a timestamp.")
+    if left_out["extra_columns"]:
+        typer.echo(f"Left out deployment columns that are not part of Camtrap DP: {', '.join(left_out['extra_columns'])}")
+    typer.echo(f"Wrote a Camtrap DP {export.CAMTRAP_DP_VERSION} data package to {out}")

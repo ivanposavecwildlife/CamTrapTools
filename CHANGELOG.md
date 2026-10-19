@@ -36,6 +36,15 @@ All notable changes to this project are documented here. The format follows
   unchanged. Classification taxonomy is kept when it is in SpeciesNet's format; the
   command reports how many images matched, were ignored or have no results, and
   images without results are recorded as `unclassified`.
+- `export` command: writes a complete Camtrap DP 1.0.2 data package (`datapackage.json`,
+  `deployments.csv`, `media.csv`, `observations.csv`) to a separate folder, with every
+  standard column, time zones on all timestamps (`--timezone`, e.g.
+  `Africa/Johannesburg`, including daylight saving), spatial, temporal and taxonomic
+  coverage, contributors, project details (`--sampling-design`) and data and media
+  licenses. Images without a timestamp and non-standard deployment columns are left out
+  and reported. Exported packages pass Frictionless validation against the Camtrap DP
+  profile, which is checked in the test suite.
+- `detect` records when SpeciesNet ran with the computer's UTC offset.
 
 ## [0.1.0] - 2026-10-15
 
