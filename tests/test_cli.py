@@ -1,6 +1,7 @@
 import json
 import sys
 
+import pandas as pd
 import pytest
 from typer.testing import CliRunner
 
@@ -512,3 +513,29 @@ def test_crops_command_rejects_bad_options(make_image, tmp_path, extra, message)
 
     assert result.exit_code == 1
     assert message in result.output
+
+
+def test_adapt_command_reports_accuracy(monkeypatch, tmp_path):
+    pytest.importorskip("torch")
+    from test_adapt import make_crops, tiny_speciesnet
+
+    crops_dir = make_crops(tmp_path / "crops")
+    pd.read_csv(crops_dir / "crops.csv").assign(
+        label=lambda crops: crops["label"].where(crops["filePath"] != "test/Vulpes_chama/east0.jpg", "Canis mesomelas")
+    ).to_csv(crops_dir / "crops.csv", index=False)
+    monkeypatch.setattr("camtraptools.adapt.load_speciesnet", lambda model: tiny_speciesnet())
+
+    result = runner.invoke(app, ["adapt", str(crops_dir), "--out", str(tmp_path / "model"), "--device", "cpu"])
+
+    assert result.exit_code == 0, result.output
+    assert "Trained a new final layer for 2 labels on cpu, keeping epoch" in result.output
+    assert "Vulpes chama: 3 training crops, new to SpeciesNet" in result.output
+    assert "⚠ Labels with no training crops, which the adapted layer cannot name (1 held-out crop):" in result.output
+    assert "Canis mesomelas (1)" in result.output
+
+
+def test_adapt_command_needs_crops(tmp_path):
+    result = runner.invoke(app, ["adapt", str(tmp_path), "--out", str(tmp_path / "model")])
+
+    assert result.exit_code == 1
+    assert "no crops.csv" in result.output

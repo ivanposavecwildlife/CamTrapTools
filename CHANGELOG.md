@@ -28,6 +28,14 @@ All notable changes to this project are documented here. The format follows
   unseen backgrounds; target shares are set with `--val` and `--test`. Boxes are padded
   (`--padding`), crops under 32 pixels and detections whose true label is blank are
   skipped, and the command warns about labels with no or few training crops.
+- `adapt` command: trains a new final layer for SpeciesNet on the crops from `crops`,
+  for only the labels in the training split, on frozen SpeciesNet features. Labels
+  SpeciesNet knows start from its own weights; classes are weighted by their number of
+  crops, and the layer from the epoch with the lowest validation loss is kept
+  (`--epochs`, `--learning-rate`, `--seed`, `--device`). The command saves the layer as
+  `adapted.pt` with every crop's prediction in `predictions.csv`, and prints accuracy
+  per split for SpeciesNet and the adapted layer and the held-out labels it cannot name.
+  Requires the optional `detect` extra.
 
 ### Changed
 

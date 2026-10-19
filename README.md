@@ -78,6 +78,12 @@ flash (`cam_noflash`) and clock errors.*
   fine-tuning a classifier (`train/`, `val/`, `test/`, one folder per species). Whole
   camera locations go to one split, so the model is tested on backgrounds it has never
   seen, and the command warns about species that are missing from training.
+- **`adapt`**: adapts SpeciesNet to your region. SpeciesNet's camera-trap backbone stays
+  frozen and a new final layer is trained on your crops, only for the species in them,
+  starting from SpeciesNet's own weights for species it already knows. This trains in
+  seconds on a laptop (using an Apple or NVIDIA GPU when available), keeps the epoch
+  with the lowest validation loss, and compares the adapted layer with SpeciesNet on
+  every split.
 - **`export`**: writes a complete Camtrap DP 1.0.2 package (`datapackage.json` and three
   tables) with time zones, coverage, contributors and licenses, using the reviewer's
   decision wherever an event was reviewed. Exported packages pass
@@ -103,6 +109,7 @@ camtraptools review my_project --images sd_cards --reviewer "Your Name"
 camtraptools review-stats my_project
 camtraptools evaluate my_project --report mistakes.html --images sd_cards
 camtraptools crops my_project --images sd_cards --out my_crops
+camtraptools adapt my_crops --out my_model
 camtraptools export my_project --out publish --title "My survey" \
     --contributor "Your Name" --timezone Africa/Johannesburg
 ```
@@ -187,7 +194,7 @@ uv run pytest
 
 CI runs the linter and tests on Python 3.11–3.14 (Linux) and on Windows and macOS,
 without the `detect` extra: tests use stand-ins for SpeciesNet, so CI never downloads
-the models.
+the models. Tests for `adapt` need PyTorch and run when the extra is installed.
 
 ## License
 

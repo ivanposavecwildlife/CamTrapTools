@@ -9,6 +9,7 @@ import typer
 
 from camtraptools import (
     __version__,
+    adapt,
     check,
     crops,
     detect,
@@ -497,3 +498,47 @@ def crops_cmd(
         for problem in problems:
             typer.echo(f"  ⚠ {problem}")
     typer.echo(f"\nWrote {out / crops.CROPS_FILE}")
+
+
+@app.command("adapt")
+def adapt_cmd(
+    crops_dir: Annotated[
+        Path,
+        typer.Argument(exists=True, file_okay=False, help="Folder of crops made by `camtraptools crops`."),
+    ],
+    out: Annotated[Path, typer.Option(help="Folder for the adapted model and its predictions.")],
+    epochs: Annotated[int, typer.Option(help="Most training passes over the crops.")] = adapt.DEFAULT_EPOCHS,
+    learning_rate: Annotated[float, typer.Option(help="Step size of the optimiser.")] = adapt.DEFAULT_LEARNING_RATE,
+    seed: Annotated[int, typer.Option(help="Random seed, for repeatable training.")] = 0,
+    device: Annotated[
+        str | None, typer.Option(help="cpu, mps (Apple GPU) or cuda (NVIDIA GPU); default: the fastest available.")
+    ] = None,
+) -> None:
+    """Adapt SpeciesNet to your region: train a new final layer on labelled crops."""
+    if not (crops_dir / crops.CROPS_FILE).exists():
+        typer.echo(f"Error: no crops.csv in {crops_dir}; run `camtraptools crops` first.", err=True)
+        raise typer.Exit(1)
+    try:
+        predictions, summary = adapt.run(
+            crops_dir, out, epochs=epochs, learning_rate=learning_rate, seed=seed, device=device
+        )
+    except (RuntimeError, ValueError) as error:
+        typer.echo(f"Error: {error}", err=True)
+        raise typer.Exit(1) from error
+    stopped = (
+        f"keeping epoch {summary['epochs']}, which had the lowest validation loss"
+        if summary["validated"]
+        else f"for {summary['epochs']} epochs (no validation crops with these labels)"
+    )
+    typer.echo(f"Trained a new final layer for {len(summary['classes'])} labels on {summary['device']}, {stopped}.")
+    for name, count, known in zip(summary["classes"], summary["trainingCrops"], summary["knownToSpeciesNet"], strict=True):
+        start = "starts from SpeciesNet" if known else "new to SpeciesNet"
+        typer.echo(f"  {name}: {crops.plural(count, 'training crop')}, {start}")
+    typer.echo("\nCrops named correctly, among labels the layer was trained on:")
+    typer.echo(adapt.accuracy_table(predictions).to_string(na_rep="–"))
+    unseen = predictions.loc[~predictions["inTraining"], "label"].value_counts()
+    if not unseen.empty:
+        held_out = crops.plural(int(unseen.sum()), "held-out crop")
+        typer.echo(f"\n⚠ Labels with no training crops, which the adapted layer cannot name ({held_out}):")
+        typer.echo("  " + ", ".join(f"{label} ({count})" for label, count in unseen.items()))
+    typer.echo(f"\nWrote {out / adapt.MODEL_FILE} and {out / adapt.PREDICTIONS_FILE}")
