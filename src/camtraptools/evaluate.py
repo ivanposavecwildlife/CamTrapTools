@@ -43,22 +43,28 @@ def truth_from_reviews(package_dir: Path) -> pd.Series:
     return pd.Series(labels, index=reviews["eventID"], name="truth")
 
 
-def truth_from_file(truth_file: Path, package_dir: Path) -> pd.Series:
-    """Return the true label for every event from a file of image labels.
-
-    The file has a ``filePath`` (or ``mediaID``) column and a ``scientificName``
-    column, empty for blank images. An event's label is the first non-blank label
-    among its images, so a burst with one image of an animal is an animal event.
-    """
+def media_labels_from_file(truth_file: Path, media_ids: set[str]) -> pd.Series:
+    """Return the true label of every image in ``media_ids``, by media ID, from a file
+    of image labels with a ``filePath`` (or ``mediaID``) column and a ``scientificName``
+    column, empty for blank images."""
     labels = pd.read_csv(truth_file, dtype=str)
     path_column = "filePath" if "filePath" in labels.columns else "mediaID"
+    labels["mediaID"] = [match_path(path, media_ids) for path in labels[path_column]]
+    labels = labels.dropna(subset=["mediaID"]).drop_duplicates("mediaID")
+    label = labels["scientificName"].fillna("").str.strip().replace("", "blank")
+    return pd.Series(label.to_numpy(), index=labels["mediaID"], name="label")
+
+
+def truth_from_file(truth_file: Path, package_dir: Path) -> pd.Series:
+    """Return the true label for every event from a file of image labels (see
+    ``media_labels_from_file``). An event's label is the first non-blank label among
+    its images, so a burst with one image of an animal is an animal event.
+    """
     observations = pd.read_csv(package_dir / OBSERVATIONS_FILE, dtype=str)
     media_events = observations.loc[observations["observationLevel"] == "media", ["mediaID", "eventID"]]
     media_events = media_events.dropna().drop_duplicates("mediaID")
-    known = set(media_events["mediaID"])
-    labels["mediaID"] = [match_path(path, known) for path in labels[path_column]]
-    labels = labels.dropna(subset=["mediaID"]).merge(media_events, on="mediaID")
-    labels["label"] = labels["scientificName"].fillna("").str.strip().replace("", "blank")
+    labels = media_labels_from_file(truth_file, set(media_events["mediaID"])).reset_index()
+    labels = labels.merge(media_events, on="mediaID")
     first_animal = labels.sort_values("mediaID").groupby("eventID")["label"].agg(
         lambda values: next((value for value in values if value != "blank"), "blank")
     )

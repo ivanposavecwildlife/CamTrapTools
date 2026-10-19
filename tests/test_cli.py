@@ -463,3 +463,52 @@ def test_evaluate_report_needs_images(make_image, tmp_path):
 
     assert result.exit_code == 1
     assert "--report needs --images" in result.output
+
+
+def test_crops_command_builds_dataset(make_image, tmp_path):
+    make_image("images/camera_A/IMG_0001.JPG", date_time_original="2024:03:01 06:00:00")
+    runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")])
+    write_speciesnet_results(tmp_path / "package", 0.9)
+    runner.invoke(app, ["detect", str(tmp_path / "package")])
+    runner.invoke(app, ["events", str(tmp_path / "package")])
+    truth = tmp_path / "truth.csv"
+    truth.write_text("filePath,scientificName\ncamera_A/IMG_0001.JPG,Oryx gazella\n")
+
+    result = runner.invoke(
+        app,
+        [
+            "crops", str(tmp_path / "package"), "--images", str(tmp_path / "images"),
+            "--out", str(tmp_path / "crops"), "--truth", str(truth),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Saved 1 crop labelled from labels in truth.csv." in result.output
+    assert "train: camera_A (1 crop)" in result.output
+    assert "Oryx gazella: no crops in val or test" in result.output
+    assert (tmp_path / "crops" / "train" / "Oryx_gazella").is_dir()
+
+
+@pytest.mark.parametrize(
+    ("extra", "message"),
+    [
+        (["--val", "0.6", "--test", "0.5"], "leave room for training"),
+        ([], "is not empty"),
+    ],
+)
+def test_crops_command_rejects_bad_options(make_image, tmp_path, extra, message):
+    make_image("images/camera_A/IMG_0001.JPG")
+    runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")])
+    write_speciesnet_results(tmp_path / "package", 0.9)
+    runner.invoke(app, ["detect", str(tmp_path / "package")])
+    out = tmp_path / "crops"
+    if not extra:
+        out.mkdir()
+        (out / "old.jpg").write_bytes(b"")
+
+    result = runner.invoke(
+        app, ["crops", str(tmp_path / "package"), "--images", str(tmp_path / "images"), "--out", str(out), *extra]
+    )
+
+    assert result.exit_code == 1
+    assert message in result.output

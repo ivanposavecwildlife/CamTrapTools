@@ -10,6 +10,7 @@ import typer
 from camtraptools import (
     __version__,
     check,
+    crops,
     detect,
     evaluate,
     events,
@@ -441,3 +442,58 @@ def evaluate_cmd(
     if report is not None:
         report.write_text(evaluate.failure_report(package, images, compared, target_precision), encoding="utf-8")
         typer.echo(f"Wrote {report}")
+
+
+@app.command("crops")
+def crops_cmd(
+    package: Annotated[
+        Path,
+        typer.Argument(exists=True, file_okay=False, help="Package folder with events from `camtraptools events`."),
+    ],
+    images: Annotated[
+        Path, typer.Option(exists=True, file_okay=False, help="The SD-card folder that was ingested into the package.")
+    ],
+    out: Annotated[Path, typer.Option(help="New folder for the crops, in train/, val/ and test/ subfolders.")],
+    truth: Annotated[
+        Path | None,
+        typer.Option(
+            exists=True, dir_okay=False, help="CSV of image labels (filePath, scientificName); default: the reviews."
+        ),
+    ] = None,
+    padding: Annotated[
+        float, typer.Option(help="Background to add around each box, as a fraction of its size.")
+    ] = crops.DEFAULT_PADDING,
+    val: Annotated[float, typer.Option(help="Target share of crops for validation.")] = crops.DEFAULT_FRACTIONS["val"],
+    test: Annotated[float, typer.Option(help="Target share of crops for testing.")] = crops.DEFAULT_FRACTIONS["test"],
+    seed: Annotated[int, typer.Option(help="Seed for breaking ties when splitting locations.")] = 0,
+) -> None:
+    """Crop every labelled animal detection into a training dataset, split by camera location."""
+    if not (package / detect.OBSERVATIONS_FILE).exists():
+        typer.echo(f"Error: no observations.csv in {package}; run `camtraptools detect` first.", err=True)
+        raise typer.Exit(1)
+    if out.exists() and any(out.iterdir()):
+        typer.echo(f"Error: {out} is not empty; choose a new folder so old crops are not mixed in.", err=True)
+        raise typer.Exit(1)
+    if not (0 <= val < 1 and 0 <= test < 1 and val + test < 1):
+        typer.echo("Error: --val and --test must be between 0 and 1 and leave room for training.", err=True)
+        raise typer.Exit(1)
+    fractions = {"train": 1 - val - test, "val": val, "test": test}
+    dataset, skipped = crops.run(package, images, out, truth, padding, fractions, seed)
+    source = f"labels in {truth.name}" if truth else "your reviews"
+    typer.echo(f"Saved {crops.plural(len(dataset), 'crop')} labelled from {source}.")
+    for reason, count in skipped.items():
+        if count:
+            typer.echo(f"  skipped {count}: {reason}")
+    if dataset.empty:
+        raise typer.Exit(1)
+    typer.echo("\nLocations per split (each location is in one split only):")
+    for split, group in dataset.groupby("split", sort=False):
+        typer.echo(f"  {split}: {', '.join(sorted(group['location'].unique()))} ({crops.plural(len(group), 'crop')})")
+    typer.echo("\nCrops per label:")
+    typer.echo(crops.summarize(dataset).to_string())
+    problems = crops.warnings(dataset)
+    if problems:
+        typer.echo("\nWarnings:")
+        for problem in problems:
+            typer.echo(f"  ⚠ {problem}")
+    typer.echo(f"\nWrote {out / crops.CROPS_FILE}")

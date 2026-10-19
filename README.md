@@ -71,6 +71,13 @@ flash (`cam_noflash`) and clock errors.*
 
   ![Review app showing a camera event with the AI's boxes and a human correction](docs/review.jpg)
 
+- **`evaluate`**: measures the AI against your reviews or a file of true labels:
+  precision and recall per species, the confidence above which each species' answers
+  can be trusted, and an HTML report of every mistake with its images.
+- **`crops`**: cuts every labelled animal detection into a training dataset for
+  fine-tuning a classifier (`train/`, `val/`, `test/`, one folder per species). Whole
+  camera locations go to one split, so the model is tested on backgrounds it has never
+  seen, and the command warns about species that are missing from training.
 - **`export`**: writes a complete Camtrap DP 1.0.2 package (`datapackage.json` and three
   tables) with time zones, coverage, contributors and licenses, using the reviewer's
   decision wherever an event was reviewed. Exported packages pass
@@ -94,6 +101,8 @@ camtraptools detect my_project --images sd_cards --country ZAF
 camtraptools events my_project
 camtraptools review my_project --images sd_cards --reviewer "Your Name"
 camtraptools review-stats my_project
+camtraptools evaluate my_project --report mistakes.html --images sd_cards
+camtraptools crops my_project --images sd_cards --out my_crops
 camtraptools export my_project --out publish --title "My survey" \
     --contributor "Your Name" --timezone Africa/Johannesburg
 ```
@@ -163,7 +172,7 @@ SD card ─► ingest/check ─► detect/events ─► review ─► ecology �
 | Ingest & QA | `ingest`, `check`, `report` | Build the data package, find camera problems, report them | ✅ v0.1.0 |
 | Detection | `detect`, `events`, `import`, `export` | SpeciesNet detection and species identification, independent events, importing other tools' results, validated Camtrap DP export | ✅ v0.2.0 |
 | Review | `review`, `review-stats` | Local web app for checking AI labels, least confident first; review statistics | ✅ v0.3.0 |
-| Evaluation | `evaluate`, `adapt` | Per-species accuracy and confidence thresholds; regional fine-tuning | Planned |
+| Evaluation | `evaluate`, `crops`, `adapt` | Per-species accuracy and confidence thresholds; training data and regional fine-tuning | In progress |
 | Ecology | `ecology` | Occupancy and activity analysis, and how sensitive results are to AI errors | Planned |
 
 ## Development

@@ -21,6 +21,13 @@ All notable changes to this project are documented here. The format follows
 - Failure report: `evaluate --report report.html --images DIR` writes a self-contained
   HTML page with the outcomes, precision and recall, thresholds and every event the AI
   did not get exactly right, with its images and bounding boxes.
+- `crops` command: saves a JPEG crop of every animal detection with a known true label
+  (from `--truth` or the reviews) in `train/`, `val/` and `test/` folders with one
+  subfolder per label, and lists them in `crops.csv`. Each camera location (its
+  `locationID`, `locationName` or deployment) goes to a single split, so evaluation uses
+  unseen backgrounds; target shares are set with `--val` and `--test`. Boxes are padded
+  (`--padding`), crops under 32 pixels and detections whose true label is blank are
+  skipped, and the command warns about labels with no or few training crops.
 
 ### Changed
 
