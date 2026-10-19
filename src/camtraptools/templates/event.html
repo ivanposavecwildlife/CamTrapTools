@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ event.eventID }} · CamTrapTools review</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface: #fcfcfb; --text-primary: #0b0b0b; --text-secondary: #52514e; --line: #e4e2dd;
+    --box: #fab219; --box-text: #0b0b0b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { color-scheme: dark; --surface: #1a1a19; --text-primary: #ffffff; --text-secondary: #c3c2b7; --line: #383835; }
+  }
+  body { margin: 0; background: var(--surface); color: var(--text-primary);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 24px;
+           border-bottom: 1px solid var(--line); padding-bottom: 12px; }
+  h1 { font-size: 22px; margin: 0; }
+  .meta { color: var(--text-secondary); margin: 0; }
+  nav { display: flex; gap: 12px; align-items: center; color: var(--text-secondary); }
+  nav a { color: inherit; text-decoration: none; padding: 4px 10px; border: 1px solid var(--line); border-radius: 6px; }
+  nav a:hover { color: var(--text-primary); border-color: var(--text-secondary); }
+  nav .disabled { opacity: 0.35; padding: 4px 10px; border: 1px solid var(--line); border-radius: 6px; }
+  .decision { margin: 16px 0; font-size: 17px; }
+  .decision strong { font-size: 20px; }
+  .images { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+  figure { margin: 0; }
+  .frame { position: relative; line-height: 0; }
+  .frame img { width: 100%; height: auto; border-radius: 6px; }
+  .box { position: absolute; border: 2px solid var(--box); border-radius: 3px; box-sizing: border-box; }
+  .box span { position: absolute; left: -2px; bottom: 100%; background: var(--box); color: var(--box-text);
+              font-size: 12px; line-height: 1.4; padding: 0 4px; border-radius: 3px 3px 0 0; white-space: nowrap; }
+  figcaption { color: var(--text-secondary); font-size: 13px; margin-top: 4px; }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div>
+    <h1>Camera {{ event.deploymentID }} · event {{ event.eventID }}</h1>
+    <p class="meta">{{ event.eventStart }}{% if event.eventEnd != event.eventStart %} to {{ event.eventEnd }}{% endif %} · {{ images | length }} image(s)</p>
+  </div>
+  <nav>
+    {% if previous_id %}<a href="/events/{{ previous_id }}" id="previous">← Previous</a>{% else %}<span class="disabled">← Previous</span>{% endif %}
+    <span>{{ position }} of {{ total }}</span>
+    {% if next_id %}<a href="/events/{{ next_id }}" id="next">Next →</a>{% else %}<span class="disabled">Next →</span>{% endif %}
+  </nav>
+</header>
+<p class="decision">
+  AI decision:
+  {% if event.observationType == "animal" %}
+    <strong>{{ event.scientificName or "unidentified animal" }}</strong>
+    {% if event.scientificName in names %}({{ names[event.scientificName] }}){% endif %}
+    · count {{ event["count"] }} · vote share {{ (event.classificationProbability | float * 100) | round | int }}%
+  {% else %}
+    <strong>{{ event.observationType }}</strong>
+  {% endif %}
+</p>
+<section class="images">
+  {% for image in images %}
+  <figure>
+    <div class="frame">
+      <img src="/media/{{ image.media.mediaID }}" alt="Image {{ image.media.fileName }}">
+      {% for box in image.detections %}
+      <div class="box" style="left: {{ box.bboxX | float * 100 }}%; top: {{ box.bboxY | float * 100 }}%; width: {{ box.bboxWidth | float * 100 }}%; height: {{ box.bboxHeight | float * 100 }}%;">
+        <span>{{ box.scientificName or box.observationType }}{% if box.classificationProbability %} {{ (box.classificationProbability | float * 100) | round | int }}%{% endif %}</span>
+      </div>
+      {% endfor %}
+    </div>
+    <figcaption>{{ image.media.fileName }} · {{ image.media.timestamp }}</figcaption>
+  </figure>
+  {% endfor %}
+</section>
+</main>
+<script>
+  document.addEventListener("keydown", (event) => {
+    const link = { ArrowLeft: "previous", ArrowRight: "next" }[event.key];
+    if (link && document.getElementById(link)) document.getElementById(link).click();
+  });
+</script>
+</body>
+</html>

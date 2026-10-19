@@ -1,0 +1,115 @@
+import json
+
+import pandas as pd
+import pytest
+from fastapi.testclient import TestClient
+
+from camtraptools import review
+from camtraptools.detect import OBSERVATION_COLUMNS
+
+
+@pytest.fixture
+def package(make_image, tmp_path):
+    images = tmp_path / "images"
+    make_image("images/camera_A/IMG_0001.JPG")
+    make_image("images/camera_A/IMG_0002.JPG")
+    make_image("images/camera_B/IMG_0001.JPG")
+    (tmp_path / "secret.txt").write_text("not an image")
+    package = tmp_path / "package"
+    package.mkdir()
+    pd.DataFrame(
+        {
+            "mediaID": ["camera_A/IMG_0001.JPG", "camera_A/IMG_0002.JPG", "camera_B/IMG_0001.JPG"],
+            "deploymentID": ["camera_A", "camera_A", "camera_B"],
+            "timestamp": ["2024-03-02T06:00:00", "2024-03-02T06:00:01", "2024-03-01T22:00:00"],
+            "filePath": ["camera_A/IMG_0001.JPG", "camera_A/IMG_0002.JPG", "camera_B/IMG_0001.JPG"],
+            "fileName": ["IMG_0001.JPG", "IMG_0002.JPG", "IMG_0001.JPG"],
+        }
+    ).to_csv(package / "media.csv", index=False)
+    rows = [
+        ("o1", "camera_A", "camera_A/IMG_0001.JPG", "camera_A-0001", "2024-03-02T06:00:00", "media", "animal", "Oryx gazella", "0.1", "0.99"),
+        ("o2", "camera_A", "camera_A/IMG_0002.JPG", "camera_A-0001", "2024-03-02T06:00:01", "media", "blank", None, None, None),
+        ("o3", "camera_B", "camera_B/IMG_0001.JPG", "camera_B-0001", "2024-03-01T22:00:00", "media", "blank", None, None, None),
+        ("e1", "camera_A", None, "camera_A-0001", "2024-03-02T06:00:00", "event", "animal", "Oryx gazella", None, "1.0"),
+        ("e2", "camera_B", None, "camera_B-0001", "2024-03-01T22:00:00", "event", "blank", None, None, None),
+    ]
+    columns = ["observationID", "deploymentID", "mediaID", "eventID", "eventStart", "observationLevel",
+               "observationType", "scientificName", "bboxX", "classificationProbability"]
+    observations = pd.DataFrame(rows, columns=columns).reindex(columns=OBSERVATION_COLUMNS).astype(object)
+    observations["eventEnd"] = observations["eventStart"]
+    observations.loc[0, ["bboxY", "bboxWidth", "bboxHeight", "count"]] = ["0.2", "0.3", "0.4", "1"]
+    observations.loc[3, "count"] = "1"
+    observations.to_csv(package / "observations.csv", index=False)
+    label = "uuid;mammalia;artiodactyla;bovidae;oryx;gazella;gemsbok"
+    results = {"predictions": [{"filepath": "camera_A/IMG_0001.JPG", "detections": [{"processed_classification": {"class": label}}]}]}
+    (package / "speciesnet.json").write_text(json.dumps(results), encoding="utf-8")
+    return package, images
+
+
+@pytest.fixture
+def client(package):
+    return TestClient(review.create_app(*package))
+
+
+def test_start_page_opens_the_first_event_in_time(client):
+    response = client.get("/", follow_redirects=False)
+
+    assert response.status_code == 307
+    assert response.headers["location"] == "/events/camera_B-0001"
+
+
+def test_event_page_shows_decision_boxes_and_navigation(client):
+    page = client.get("/events/camera_A-0001").text
+
+    assert "Oryx gazella</strong>" in page
+    assert "(gemsbok)" in page
+    assert "vote share 100%" in page
+    assert 'src="/media/camera_A/IMG_0001.JPG"' in page
+    assert "left: 10.0%; top: 20.0%; width: 30.0%; height: 40.0%;" in page
+    assert "2 of 2" in page
+    assert 'href="/events/camera_B-0001" id="previous"' in page
+    assert 'id="next"' not in page
+
+
+def test_blank_event_page(client):
+    page = client.get("/events/camera_B-0001").text
+
+    assert "<strong>blank</strong>" in page
+    assert 'class="box"' not in page
+
+
+def test_unknown_event_is_not_found(client):
+    assert client.get("/events/camera_Z-0001").status_code == 404
+
+
+def test_images_of_the_package_are_served(client):
+    response = client.get("/media/camera_A/IMG_0001.JPG")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/jpeg"
+
+
+@pytest.mark.parametrize("path", ["/media/../secret.txt", "/media/camera_A/../../secret.txt", "/media/secret.txt"])
+def test_only_package_images_are_served(client, path):
+    assert client.get(path).status_code == 404
+
+
+def test_names_are_escaped(package):
+    package_dir, images = package
+    observations = pd.read_csv(package_dir / "observations.csv", dtype=str)
+    observations.loc[observations["observationID"] == "e1", "scientificName"] = "<script>alert(1)</script>"
+    observations.to_csv(package_dir / "observations.csv", index=False)
+
+    page = TestClient(review.create_app(package_dir, images)).get("/events/camera_A-0001").text
+
+    assert "<script>alert(1)</script>" not in page
+    assert "&lt;script&gt;" in page
+
+
+def test_create_app_needs_events(package):
+    package_dir, images = package
+    observations = pd.read_csv(package_dir / "observations.csv", dtype=str)
+    observations[observations["observationLevel"] == "media"].to_csv(package_dir / "observations.csv", index=False)
+
+    with pytest.raises(ValueError, match="run `camtraptools events` first"):
+        review.create_app(package_dir, images)

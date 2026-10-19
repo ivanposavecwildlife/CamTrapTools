@@ -16,6 +16,7 @@ from camtraptools import (
     importer,
     ingest,
     report,
+    review,
 )
 
 app = typer.Typer(
@@ -300,3 +301,37 @@ def export_cmd(
     if left_out["extra_columns"]:
         typer.echo(f"Left out deployment columns that are not part of Camtrap DP: {', '.join(left_out['extra_columns'])}")
     typer.echo(f"Wrote a Camtrap DP {export.CAMTRAP_DP_VERSION} data package to {out}")
+
+
+@app.command("review")
+def review_cmd(
+    package: Annotated[
+        Path,
+        typer.Argument(exists=True, file_okay=False, help="Package folder with events from `camtraptools events`."),
+    ],
+    images: Annotated[
+        Path,
+        typer.Option(exists=True, file_okay=False, help="The SD-card folder that was ingested into the package."),
+    ],
+    port: Annotated[int, typer.Option(help="Port for the local web server.")] = 8765,
+    open_browser: Annotated[bool, typer.Option(help="Open the review page in the browser.")] = True,
+) -> None:
+    """Review the AI's observations in your browser, one event at a time."""
+    import webbrowser
+    from threading import Timer
+
+    import uvicorn
+
+    if not (package / detect.OBSERVATIONS_FILE).exists():
+        typer.echo(f"Error: no observations.csv in {package}; run `camtraptools detect` first.", err=True)
+        raise typer.Exit(1)
+    try:
+        app_ = review.create_app(package, images)
+    except ValueError as error:
+        typer.echo(f"Error: {error}", err=True)
+        raise typer.Exit(1)
+    url = f"http://127.0.0.1:{port}/"
+    typer.echo(f"Reviewing {package} at {url} (press Ctrl+C to stop)")
+    if open_browser:
+        Timer(1.0, webbrowser.open, [url]).start()
+    uvicorn.run(app_, host="127.0.0.1", port=port, log_level="warning")

@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `review` command: a local web app (on 127.0.0.1 only) that shows each event's images
+  with the AI's bounding boxes, labels and confidences, the event-level decision with its
+  vote share and common name, and previous/next navigation with the arrow keys. Only
+  images listed in the package can be served.
+
 ## [0.2.0] - 2026-10-19
 
 AI detection and species identification, independent events, importing other tools'

@@ -314,3 +314,33 @@ def test_export_command_needs_coordinates(make_image, tmp_path):
 
     assert result.exit_code == 1
     assert "deployments without coordinates: camera_A" in result.output
+
+
+def test_review_command_starts_server(make_image, monkeypatch, tmp_path):
+    make_image("images/camera_A/IMG_0001.JPG", date_time_original="2024:03:01 06:00:00")
+    runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")])
+    write_speciesnet_results(tmp_path / "package", 0.9)
+    runner.invoke(app, ["detect", str(tmp_path / "package")])
+    runner.invoke(app, ["events", str(tmp_path / "package")])
+    started = {}
+    monkeypatch.setattr("uvicorn.run", lambda app, host, port, log_level: started.update(host=host, port=port))
+
+    result = runner.invoke(
+        app, ["review", str(tmp_path / "package"), "--images", str(tmp_path / "images"), "--no-open-browser"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert started == {"host": "127.0.0.1", "port": 8765}
+    assert "http://127.0.0.1:8765/" in result.output
+
+
+def test_review_command_needs_events(make_image, tmp_path):
+    make_image("images/camera_A/IMG_0001.JPG", date_time_original="2024:03:01 06:00:00")
+    runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")])
+    write_speciesnet_results(tmp_path / "package", 0.9)
+    runner.invoke(app, ["detect", str(tmp_path / "package")])
+
+    result = runner.invoke(app, ["review", str(tmp_path / "package"), "--images", str(tmp_path / "images")])
+
+    assert result.exit_code == 1
+    assert "run `camtraptools events` first" in result.output
