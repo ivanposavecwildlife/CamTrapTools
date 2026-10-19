@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-19
+
+Evaluation and regional adaptation: measure the AI against ground truth, build crop
+datasets split by camera, adapt SpeciesNet to a region and use the adapted layer in
+`detect`, with a case study on Snapshot Kgalagadi.
+
 ### Added
 
 - `evaluate` command: compares the AI's event-level decisions with ground truth, either
@@ -27,12 +33,13 @@ All notable changes to this project are documented here. The format follows
   `locationID`, `locationName` or deployment) goes to a single split, so evaluation uses
   unseen backgrounds; target shares are set with `--val` and `--test`. Boxes are padded
   (`--padding`), crops under 32 pixels and detections whose true label is blank are
-  skipped, and the command warns about labels with no or few training crops.
+  skipped, the padding is recorded, and the command warns about labels with no or few
+  training crops.
 - `adapt` command: trains a new final layer for SpeciesNet on the crops from `crops`,
   for only the labels in the training split, on frozen SpeciesNet features. Labels
-  SpeciesNet knows start from its own weights, the layer from the epoch with the lowest validation loss is kept (`--epochs`,
-  `--learning-rate`, `--seed`, `--device`), and `--balanced` weights classes by their
-  number of crops. The command saves the layer as `adapted.pt`, every crop's prediction
+  SpeciesNet knows start from its own weights, the layer from the epoch with the lowest
+  validation loss is kept (`--epochs`, `--learning-rate`, `--seed`, `--device`), and
+  `--balanced` weights classes by their number of crops. The command saves the layer as `adapted.pt`, every crop's prediction
   in `predictions.csv` and the crops' SpeciesNet features in `features.npz`, which later
   runs reuse. It prints accuracy per split and per label for SpeciesNet as run by
   `detect`, SpeciesNet limited to the training labels and the adapted layer, and the
@@ -47,12 +54,19 @@ All notable changes to this project are documented here. The format follows
   in `classifiedBy`, and the command prints how many of SpeciesNet's answers changed.
 - `evaluate --deployment` compares only events from the given deployments, such as
   cameras held out from training.
-- `crops.csv` records the padding used.
+- Case study (`docs/case-study-kgalagadi.md`): adapting SpeciesNet on Snapshot
+  Kgalagadi Season 1 raised correct events on seven held-out cameras from 72 to 92 of
+  104. `examples/kgalagadi/prepare.py` downloads the data and writes the truth file to
+  reproduce it.
 
 ### Changed
 
 - Per-label precision counts answers that are correct above species level (such as
   *Bovidae* for a gemsbok) as right; recall still requires the exact taxon.
+
+### Fixed
+
+- The review app screenshot in the README was missing from the repository.
 
 ## [0.3.0] - 2026-10-19
 
@@ -149,6 +163,7 @@ First release: ingest, quality checks and an HTML health report.
   summary table and all issues, in light and dark mode.
 - Continuous integration on Python 3.11–3.14 (Linux) and on Windows and macOS.
 
+[0.4.0]: https://github.com/ivanposavecwildlife/CamTrapTools/releases/tag/v0.4.0
 [0.3.0]: https://github.com/ivanposavecwildlife/CamTrapTools/releases/tag/v0.3.0
 [0.2.0]: https://github.com/ivanposavecwildlife/CamTrapTools/releases/tag/v0.2.0
 [0.1.0]: https://github.com/ivanposavecwildlife/CamTrapTools/releases/tag/v0.1.0
