@@ -132,89 +132,69 @@ def test_report_command_needs_an_ingested_package(tmp_path):
     assert "run `camtraptools ingest` first" in result.output
 
 
+def write_speciesnet_results(package, conf, country=None):
+    gemsbok = "uuid;mammalia;artiodactyla;bovidae;oryx;gazella;gemsbok"
+    detection = {
+        "category": "1",
+        "label": "animal",
+        "conf": conf,
+        "bbox": [0, 0, 1, 1],
+        "processed_classification": {"class": gemsbok, "score": 0.99, "source": "classifier"},
+    }
+    results = {
+        "info": {"model": "kaggle:google/speciesnet/pyTorch/v4.0.3a/1", "country": country},
+        "predictions": [{"filepath": "camera_A/IMG_0001.JPG", "detections": [detection], "model_version": "4.0.3a"}],
+    }
+    results_file = package / "speciesnet.json"
+    results_file.write_text(json.dumps(results), encoding="utf-8")
+    return results_file
+
+
 def test_detect_command_summarizes_results(make_image, monkeypatch, tmp_path):
     make_image("images/camera_A/IMG_0001.JPG", date_time_original="2024:03:01 06:00:00")
-    runner.invoke(
-        app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")]
+    runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")])
+    monkeypatch.setattr(
+        "camtraptools.detect.run",
+        lambda package, images, model, country, admin1_region: write_speciesnet_results(package, 0.9, country),
     )
 
-    def fake_run(package, images, model):
-        results = {
-            "images": [
-                {
-                    "file": "camera_A/IMG_0001.JPG",
-                    "detections": [
-                        {"category": "1", "conf": 0.9, "bbox": [0, 0, 1, 1]}
-                    ],
-                }
-            ],
-            "detection_categories": {"1": "animal", "2": "person", "3": "vehicle"},
-        }
-        results_file = package / "megadetector.json"
-        results_file.write_text(json.dumps(results), encoding="utf-8")
-        return results_file
-
-    monkeypatch.setattr("camtraptools.detect.run", fake_run)
-
     result = runner.invoke(
-        app, ["detect", str(tmp_path / "package"), "--images", str(tmp_path / "images")]
+        app, ["detect", str(tmp_path / "package"), "--images", str(tmp_path / "images"), "--country", "ZAF"]
     )
 
     assert result.exit_code == 0
-    assert "camera_A" in result.output
+    assert "gemsbok" in result.output
     assert "observations.csv (1 observations)" in result.output
-
-
-def test_detect_command_explains_missing_extra(make_image, monkeypatch, tmp_path):
-    make_image("images/camera_A/IMG_0001.JPG")
-    runner.invoke(
-        app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")]
-    )
-    monkeypatch.setitem(sys.modules, "megadetector", None)
-
-    result = runner.invoke(
-        app, ["detect", str(tmp_path / "package"), "--images", str(tmp_path / "images")]
-    )
-
-    assert result.exit_code == 1
-    assert "uv sync --extra detect" in result.output
 
 
 def test_detect_command_reuses_existing_results(make_image, tmp_path):
     make_image("images/camera_A/IMG_0001.JPG", date_time_original="2024:03:01 06:00:00")
-    runner.invoke(
-        app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")]
-    )
-    results = {
-        "images": [
-            {
-                "file": "camera_A/IMG_0001.JPG",
-                "detections": [{"category": "1", "conf": 0.3, "bbox": [0, 0, 1, 1]}],
-            }
-        ],
-        "detection_categories": {"1": "animal", "2": "person", "3": "vehicle"},
-        "info": {"detector": "MDV5A"},
-    }
-    (tmp_path / "package/megadetector.json").write_text(
-        json.dumps(results), encoding="utf-8"
-    )
+    runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")])
+    write_speciesnet_results(tmp_path / "package", 0.3, "ZAF")
 
-    result = runner.invoke(
-        app, ["detect", str(tmp_path / "package"), "--threshold", "0.5"]
-    )
+    result = runner.invoke(app, ["detect", str(tmp_path / "package"), "--country", "ZAF", "--threshold", "0.5"])
 
     assert result.exit_code == 0
-    assert "Using existing MDV5A results" in result.output
+    assert "Using existing results" in result.output
     assert "observations.csv (1 observations)" in result.output
 
 
 def test_detect_command_needs_images_to_run(make_image, tmp_path):
     make_image("images/camera_A/IMG_0001.JPG")
-    runner.invoke(
-        app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")]
-    )
+    runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")])
 
     result = runner.invoke(app, ["detect", str(tmp_path / "package")])
 
     assert result.exit_code == 1
     assert "--images is required" in result.output
+
+
+def test_detect_command_explains_missing_extra(make_image, monkeypatch, tmp_path):
+    make_image("images/camera_A/IMG_0001.JPG")
+    runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")])
+    monkeypatch.setitem(sys.modules, "speciesnet", None)
+
+    result = runner.invoke(app, ["detect", str(tmp_path / "package"), "--images", str(tmp_path / "images")])
+
+    assert result.exit_code == 1
+    assert "uv sync --extra detect" in result.output

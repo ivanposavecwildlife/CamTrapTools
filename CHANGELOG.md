@@ -8,17 +8,20 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
-- `detect` command: runs MegaDetector (MDv5a by default, `--model` to choose another)
-  on every ingested image, saves the results as `megadetector.json` in the standard
-  MegaDetector batch format, and summarizes images with animals, people, vehicles or
-  nothing per deployment (`--threshold`, default 0.2). Requires the optional `detect`
-  extra; MegaDetector's inference code is GPL-licensed.
+- `detect` command: runs SpeciesNet on every ingested image. SpeciesNet uses
+  MegaDetector v5a to find animals, people and vehicles, classifies each animal and
+  applies geofencing (`--country`, `--admin1-region`) and taxonomic rollup. Results are
+  saved as `speciesnet.json`, and the command prints the images per category and per
+  species for each deployment. Requires the optional `detect` extra; SpeciesNet is
+  Apache-2.0 and its MegaDetector inference code is GPL-licensed.
 - `detect` writes `observations.csv` with Camtrap DP media-level observations: one per
-  detection at or above the threshold (with bounding box, confidence and the model
-  version as `classifiedBy`), `blank` for images without detections and `unclassified`
-  for images MegaDetector could not read.
-- `detect` reuses existing results for the same model, so trying another `--threshold`
-  is instant; `--rerun` runs MegaDetector again and `--images` is only needed when it runs.
+  detection at or above `--threshold` (default 0.2) with bounding box, `scientificName`
+  (species, or a higher taxon such as *Bovidae* when SpeciesNet rolls up), classifier
+  probability and model version; `blank` for empty images, `unknown` when SpeciesNet
+  cannot tell, and `unclassified` for images it could not process.
+- `detect` reuses existing results for the same model and country, so trying another
+  `--threshold` is instant; `--rerun` runs SpeciesNet again, and `--images` is only
+  needed when it runs.
 
 ## [0.1.0] - 2026-10-15
 

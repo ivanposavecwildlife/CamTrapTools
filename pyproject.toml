@@ -18,7 +18,7 @@ camtraptools = "camtraptools.cli:app"
 
 [project.optional-dependencies]
 detect = [
-    "megadetector>=10.0.28",
+    "speciesnet>=5.0.6",
 ]
 
 [dependency-groups]

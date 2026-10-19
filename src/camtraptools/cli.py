@@ -142,34 +142,44 @@ def detect_cmd(
         Path | None,
         typer.Option(exists=True, file_okay=False, help="The SD-card folder that was ingested into the package."),
     ] = None,
-    model: Annotated[str, typer.Option(help="MegaDetector model name or model file.")] = detect.DEFAULT_MODEL,
+    country: Annotated[
+        str | None, typer.Option(help="Three-letter country code (ISO 3166-1 alpha-3), e.g. ZAF, for geofencing.")
+    ] = None,
+    admin1_region: Annotated[
+        str | None, typer.Option(help="State or province within the country (ISO 3166-2), e.g. CA.")
+    ] = None,
+    model: Annotated[str, typer.Option(help="SpeciesNet model to use.")] = detect.DEFAULT_MODEL,
     threshold: Annotated[
-        float, typer.Option(help="Minimum confidence for keeping a detection as an observation.")
+        float, typer.Option(help="Minimum detection confidence for keeping a detection as an observation.")
     ] = detect.DEFAULT_THRESHOLD,
-    rerun: Annotated[bool, typer.Option(help="Run MegaDetector even if results for this model exist.")] = False,
+    rerun: Annotated[bool, typer.Option(help="Run SpeciesNet even if results for these settings exist.")] = False,
 ) -> None:
-    """Find animals, people and vehicles in every image with MegaDetector."""
+    """Find and identify animals, people and vehicles in every image with SpeciesNet."""
     if not (package / "media.csv").exists():
         typer.echo(f"Error: no media.csv in {package}; run `camtraptools ingest` first.", err=True)
         raise typer.Exit(1)
     results_file = package / detect.RESULTS_FILE
-    if rerun or not detect.has_results(results_file, model):
+    if rerun or not detect.has_results(results_file, model, country):
         if images is None:
-            typer.echo("Error: --images is required to run MegaDetector.", err=True)
+            typer.echo("Error: --images is required to run SpeciesNet.", err=True)
             raise typer.Exit(1)
         try:
-            results_file = detect.run(package, images, model)
+            results_file = detect.run(package, images, model, country, admin1_region)
         except RuntimeError as error:
             typer.echo(f"Error: {error}", err=True)
             raise typer.Exit(1)
     else:
-        typer.echo(f"Using existing {model} results in {results_file} (pass --rerun to run MegaDetector again).")
+        typer.echo(f"Using existing results in {results_file} (pass --rerun to run SpeciesNet again).")
     media = pd.read_csv(package / "media.csv")
-    summary = detect.summarize_detections(media, detect.load_detections(results_file), threshold)
+    detections = detect.load_detections(results_file)
     typer.echo(f"Images with detections at confidence {threshold:g} or higher:")
-    typer.echo(summary.to_string())
+    typer.echo(detect.summarize_detections(media, detections, threshold).to_string())
+    species = detect.summarize_species(media, detections, threshold)
+    if not species.empty:
+        typer.echo("\nImages per species:")
+        typer.echo(species.to_string())
     failed = detect.failed_images(results_file)
     if failed:
-        typer.echo(f"{len(failed)} image(s) could not be processed, for example {failed[0]}")
+        typer.echo(f"{len(failed)} image(s) could not be fully processed, for example {failed[0]}")
     observations = detect.write_observations(package, threshold)
     typer.echo(f"Wrote {results_file} and {package / detect.OBSERVATIONS_FILE} ({len(observations)} observations)")

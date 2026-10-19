@@ -1,82 +1,120 @@
-"""Find animals, people and vehicles in images with MegaDetector.
+"""Find and identify animals in images with SpeciesNet.
 
-Detection needs the optional ``detect`` extra, which installs the
-``megadetector`` package. MegaDetector's model inference code is GPL-licensed.
+SpeciesNet runs MegaDetector to find animals, people and vehicles, then
+classifies each animal and applies geofencing and taxonomic rollup. Detection
+needs the optional ``detect`` extra, which installs the ``speciesnet`` package
+(Apache-2.0). Its MegaDetector inference code is GPL-licensed.
 """
 
 import json
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 
-DEFAULT_MODEL = "MDV5A"
+DEFAULT_MODEL = "kaggle:google/speciesnet/pyTorch/v4.0.3a/1"
 DEFAULT_THRESHOLD = 0.2
-RESULTS_FILE = "megadetector.json"
-CATEGORIES = ["animal", "person", "vehicle"]
+RESULTS_FILE = "speciesnet.json"
+CATEGORIES = ["animal", "human", "vehicle"]
+SPECIAL_LABELS = {"animal": "animal", "blank": "blank", "human": "human", "vehicle": "vehicle", "no cv result": "unknown"}
 
 
-def run(package_dir: Path, images_dir: Path, model: str = DEFAULT_MODEL) -> Path:
-    """Run MegaDetector on every image in the package and save the results, in the
-    standard MegaDetector batch format, as ``megadetector.json`` in the package."""
+def run(
+    package_dir: Path,
+    images_dir: Path,
+    model: str = DEFAULT_MODEL,
+    country: str | None = None,
+    admin1_region: str | None = None,
+) -> Path:
+    """Run SpeciesNet on every image in the package and save its predictions as
+    ``speciesnet.json`` in the package, with paths relative to ``images_dir``."""
     try:
-        from megadetector.detection.run_detector_batch import (
-            load_and_run_detector_batch,
-            write_results_to_file,
-        )
+        from speciesnet import SpeciesNet
     except ImportError as error:
         raise RuntimeError(
             "Detection needs the optional 'detect' extra. Install it with: uv sync --extra detect"
         ) from error
     media = pd.read_csv(package_dir / "media.csv")
     image_files = [str(images_dir / file_path) for file_path in media["filePath"]]
-    results = load_and_run_detector_batch(model, image_files, quiet=True)
+    predictions = SpeciesNet(model).predict(filepaths=image_files, country=country, admin1_region=admin1_region)
+    for prediction, file_path in zip(predictions["predictions"], media["filePath"], strict=True):
+        prediction["filepath"] = file_path
+    predictions["info"] = {
+        **predictions.get("info", {}),
+        "model": model,
+        "country": country,
+        "admin1_region": admin1_region,
+        "completion_time": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+    }
     results_file = package_dir / RESULTS_FILE
-    write_results_to_file(
-        results,
-        str(results_file),
-        relative_path_base=str(images_dir),
-        detector_file=model,
-    )
+    results_file.write_text(json.dumps(predictions, indent=1), encoding="utf-8")
     return results_file
 
 
+def has_results(results_file: Path, model: str, country: str | None = None) -> bool:
+    """Return True if ``results_file`` exists and was made with ``model`` for ``country``."""
+    if not results_file.exists():
+        return False
+    info = json.loads(results_file.read_text(encoding="utf-8")).get("info", {})
+    return info.get("model") == model and info.get("country") == country
+
+
+def parse_taxon(label: str) -> tuple[str | None, str]:
+    """Split a SpeciesNet label into a scientific name and a common name.
+
+    Labels look like ``uuid;class;order;family;genus;species;common name``. The
+    scientific name is the most specific rank given, e.g. ``Oryx gazella`` or
+    ``Bovidae``. Special labels (``blank``, ``animal``, ``human``, ``vehicle`` and
+    ``no cv result``, which means unknown) have none.
+    """
+    parts = label.split(";")
+    common_name = parts[-1]
+    if common_name in SPECIAL_LABELS:
+        return None, common_name
+    taxon_class, order, family, genus, species = parts[1:6]
+    if genus and species:
+        return f"{genus.capitalize()} {species}", common_name
+    rank = next(name for name in (genus, family, order, taxon_class) if name)
+    return rank.capitalize(), common_name
+
+
 def load_detections(results_file: Path) -> pd.DataFrame:
-    """Return one row per detection: image, category, confidence and bounding box.
+    """Return one row per detection: image, category, confidence, bounding box and,
+    for classified detections, SpeciesNet's final label and score.
 
     Bounding boxes are ``x``, ``y`` (top left), ``width`` and ``height``, as
     fractions of the image size.
     """
     results = json.loads(results_file.read_text(encoding="utf-8"))
-    categories = results["detection_categories"]
     rows = []
-    for image in results["images"]:
-        for detection in image.get("detections") or []:
+    for prediction in results["predictions"]:
+        for detection in prediction.get("detections") or []:
             x, y, width, height = detection["bbox"]
+            classification = detection.get("processed_classification") or {}
             rows.append(
                 {
-                    "filePath": image["file"],
-                    "category": categories[detection["category"]],
+                    "filePath": prediction["filepath"],
+                    "category": detection["label"],
                     "conf": detection["conf"],
                     "x": x,
                     "y": y,
                     "width": width,
                     "height": height,
+                    "label": classification.get("class"),
+                    "score": classification.get("score"),
                 }
             )
-    return pd.DataFrame(
-        rows, columns=["filePath", "category", "conf", "x", "y", "width", "height"]
-    )
+    columns = ["filePath", "category", "conf", "x", "y", "width", "height", "label", "score"]
+    return pd.DataFrame(rows, columns=columns)
 
 
 def failed_images(results_file: Path) -> list[str]:
-    """Return the images MegaDetector could not process."""
+    """Return the images SpeciesNet could not fully process."""
     results = json.loads(results_file.read_text(encoding="utf-8"))
-    return [image["file"] for image in results["images"] if image.get("failure")]
+    return [prediction["filepath"] for prediction in results["predictions"] if prediction.get("failures")]
 
 
-def summarize_detections(
-    media: pd.DataFrame, detections: pd.DataFrame, threshold: float
-) -> pd.DataFrame:
+def summarize_detections(media: pd.DataFrame, detections: pd.DataFrame, threshold: float) -> pd.DataFrame:
     """Return, per deployment, how many images contain each category at or above
     ``threshold``, and how many contain nothing."""
     confident = detections[detections["conf"] >= threshold]
@@ -88,6 +126,17 @@ def summarize_detections(
     summary = images.groupby("deploymentID")[[*CATEGORIES, "empty"]].sum()
     summary.insert(0, "images", images.groupby("deploymentID").size())
     return summary
+
+
+def summarize_species(media: pd.DataFrame, detections: pd.DataFrame, threshold: float) -> pd.DataFrame:
+    """Return the number of images per species (or higher taxon) and deployment,
+    for animal detections at or above ``threshold``."""
+    animals = detections[(detections["conf"] >= threshold) & detections["label"].notna()].copy()
+    animals["species"] = [parse_taxon(label)[1] for label in animals["label"]]
+    animals = animals[(animals["species"] == "animal") | ~animals["species"].isin(SPECIAL_LABELS)]
+    animals = animals.merge(media[["filePath", "deploymentID"]], on="filePath")
+    unique = animals.drop_duplicates(["filePath", "species"])
+    return unique.groupby(["species", "deploymentID"]).size().unstack(fill_value=0)
 
 
 OBSERVATIONS_FILE = "observations.csv"
@@ -121,30 +170,21 @@ OBSERVATION_COLUMNS = [
     "observationTags",
     "observationComments",
 ]
-OBSERVATION_TYPES = {"animal": "animal", "person": "human", "vehicle": "vehicle"}
+def observation_type_and_name(detection) -> tuple[str, str | None]:
+    """Return the Camtrap DP observation type and scientific name for a detection."""
+    if not isinstance(detection.label, str):
+        return detection.category, None
+    scientific_name, common_name = parse_taxon(detection.label)
+    return SPECIAL_LABELS.get(common_name, "animal"), scientific_name
 
 
-def has_results(results_file: Path, model: str) -> bool:
-    """Return True if ``results_file`` exists and was made with ``model``."""
-    if not results_file.exists():
-        return False
-    results = json.loads(results_file.read_text(encoding="utf-8"))
-    return results.get("info", {}).get("detector") == model
-
-
-def build_observations(
-    media: pd.DataFrame, results_file: Path, threshold: float
-) -> pd.DataFrame:
+def build_observations(media: pd.DataFrame, results_file: Path, threshold: float) -> pd.DataFrame:
     """Return Camtrap DP media-level observations: one per detection at or above
     ``threshold``, one "blank" per image without any, and one "unclassified" per
-    image MegaDetector could not process."""
-    info = json.loads(results_file.read_text(encoding="utf-8")).get("info", {})
-    version = info.get("detector_metadata", {}).get("megadetector_version") or info.get(
-        "detector", ""
-    )
-    classified_at = info.get("detection_completion_time")
-    if classified_at:
-        classified_at = pd.Timestamp(classified_at).strftime("%Y-%m-%dT%H:%M:%S")
+    image SpeciesNet could not process."""
+    results = json.loads(results_file.read_text(encoding="utf-8"))
+    completion_time = results.get("info", {}).get("completion_time")
+    versions = {prediction["filepath"]: prediction.get("model_version") for prediction in results["predictions"]}
     detections = load_detections(results_file)
     confident = detections[detections["conf"] >= threshold]
     detections_by_image = dict(list(confident.groupby("filePath")))
@@ -158,37 +198,38 @@ def build_observations(
             "eventEnd": image.timestamp,
             "observationLevel": "media",
             "classificationMethod": "machine",
-            "classifiedBy": f"MegaDetector {version}".strip(),
-            "classificationTimestamp": classified_at,
+            "classifiedBy": f"SpeciesNet {versions.get(image.filePath) or ''}".strip(),
+            "classificationTimestamp": completion_time,
         }
         if image.filePath in failed:
             rows.append({**base, "observationType": "unclassified"})
         elif image.filePath in detections_by_image:
             for detection in detections_by_image[image.filePath].itertuples():
+                observation_type, scientific_name = observation_type_and_name(detection)
+                probability = detection.score if isinstance(detection.label, str) else detection.conf
                 rows.append(
                     {
                         **base,
-                        "observationType": OBSERVATION_TYPES[detection.category],
-                        "count": 1,
+                        "observationType": observation_type,
+                        "scientificName": scientific_name,
+                        "count": 1 if observation_type in CATEGORIES else None,
                         "bboxX": detection.x,
                         "bboxY": detection.y,
                         "bboxWidth": detection.width,
                         "bboxHeight": detection.height,
-                        "classificationProbability": detection.conf,
+                        "classificationProbability": probability,
                     }
                 )
         else:
             rows.append({**base, "observationType": "blank"})
     observations = pd.DataFrame(rows, columns=OBSERVATION_COLUMNS)
-    observations["observationID"] = [
-        f"obs{number:06d}" for number in range(1, len(observations) + 1)
-    ]
+    observations["observationID"] = [f"obs{number:06d}" for number in range(1, len(observations) + 1)]
     observations["count"] = observations["count"].astype("Int64")
     return observations
 
 
 def write_observations(package_dir: Path, threshold: float = DEFAULT_THRESHOLD) -> pd.DataFrame:
-    """Write ``observations.csv`` to the package from its MegaDetector results."""
+    """Write ``observations.csv`` to the package from its SpeciesNet results."""
     media = pd.read_csv(package_dir / "media.csv", dtype={"timestamp": str})
     observations = build_observations(media, package_dir / RESULTS_FILE, threshold)
     observations.to_csv(package_dir / OBSERVATIONS_FILE, index=False)
