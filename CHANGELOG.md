@@ -22,6 +22,13 @@ All notable changes to this project are documented here. The format follows
 - `detect` reuses existing results for the same model and country, so trying another
   `--threshold` is instant; `--rerun` runs SpeciesNet again, and `--images` is only
   needed when it runs.
+- `events` command: groups consecutive images at each deployment into independent
+  events (a new event after more than `--gap` minutes without images, default 30),
+  fills in `eventID` on media-level observations and adds one event-level observation
+  per event. The event's species is chosen by summed classifier probability across its
+  images, its count is the largest number of individuals in any single image, and the
+  command prints independent animal events per taxon and deployment. Rerunning
+  replaces earlier event-level observations.
 
 ## [0.1.0] - 2026-10-15
 

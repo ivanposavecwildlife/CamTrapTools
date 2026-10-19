@@ -6,7 +6,7 @@ from typing import Annotated
 import pandas as pd
 import typer
 
-from camtraptools import __version__, check, detect, ingest, report
+from camtraptools import __version__, check, detect, events, ingest, report
 
 app = typer.Typer(
     help="CamTrapTools: camera-trap toolkit, from SD card to ecological answers."
@@ -183,3 +183,27 @@ def detect_cmd(
         typer.echo(f"{len(failed)} image(s) could not be fully processed, for example {failed[0]}")
     observations = detect.write_observations(package, threshold)
     typer.echo(f"Wrote {results_file} and {package / detect.OBSERVATIONS_FILE} ({len(observations)} observations)")
+
+
+@app.command("events")
+def events_cmd(
+    package: Annotated[
+        Path,
+        typer.Argument(exists=True, file_okay=False, help="Camtrap DP package folder with observations from `detect`."),
+    ],
+    gap: Annotated[
+        float, typer.Option(help="Start a new event after this many minutes without images.")
+    ] = events.DEFAULT_GAP_MINUTES,
+) -> None:
+    """Group images into independent events and count them per species."""
+    if not (package / detect.OBSERVATIONS_FILE).exists():
+        typer.echo(f"Error: no observations.csv in {package}; run `camtraptools detect` first.", err=True)
+        raise typer.Exit(1)
+    event_observations = events.run(package, gap)
+    images = len(pd.read_csv(package / "media.csv"))
+    typer.echo(f"Grouped {images} images into {len(event_observations)} events ({gap:g}-minute gap).")
+    table = events.summarize_events(event_observations)
+    if not table.empty:
+        typer.echo("\nIndependent animal events per taxon:")
+        typer.echo(table.to_string())
+    typer.echo(f"Wrote {package / detect.OBSERVATIONS_FILE}")

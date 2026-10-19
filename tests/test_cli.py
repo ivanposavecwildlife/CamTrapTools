@@ -198,3 +198,27 @@ def test_detect_command_explains_missing_extra(make_image, monkeypatch, tmp_path
 
     assert result.exit_code == 1
     assert "uv sync --extra detect" in result.output
+
+
+def test_events_command_groups_images(make_image, tmp_path):
+    make_image("images/camera_A/IMG_0001.JPG", date_time_original="2024:03:01 06:00:00")
+    make_image("images/camera_A/IMG_0002.JPG", date_time_original="2024:03:01 06:00:00")
+    runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")])
+    write_speciesnet_results(tmp_path / "package", 0.9)
+    runner.invoke(app, ["detect", str(tmp_path / "package")])
+
+    result = runner.invoke(app, ["events", str(tmp_path / "package")])
+
+    assert result.exit_code == 0
+    assert "Grouped 2 images into 1 events (30-minute gap)." in result.output
+    assert "Oryx gazella" in result.output
+
+
+def test_events_command_needs_observations(make_image, tmp_path):
+    make_image("images/camera_A/IMG_0001.JPG")
+    runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")])
+
+    result = runner.invoke(app, ["events", str(tmp_path / "package")])
+
+    assert result.exit_code == 1
+    assert "run `camtraptools detect` first" in result.output
