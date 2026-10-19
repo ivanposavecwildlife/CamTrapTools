@@ -148,7 +148,7 @@ underestimate how long a camera was running. Coordinates are required for `expor
 
 ## Validated on real data
 
-Tested on four deployments from
+Tested first on four deployments from
 [Snapshot Kgalagadi](https://lila.science/datasets/snapshot-kgalagadi/) (LILA BC):
 
 - EXIF timestamps matched the published capture times **76 of 76** times.
@@ -168,20 +168,20 @@ Tested on four deployments from
 - Ordering events by AI confidence put **all 12 events the AI did not get exactly right
   among the first 13 of 60**; the remaining 47 were all correct. Reviewing the least
   confident 22% of events would have caught every mistake.
-- Adapting SpeciesNet on all of Season 1 (2,336 animal images, 20 cameras; 7 cameras
-  held out for testing) raised the share of test crops named correctly to species from
-  **72% to 91%**, and the average over species from 43% to 70%. Most of SpeciesNet's
-  misses were cautious answers such as *Bovidae* (112 of 118), while every miss of the
-  adapted layer is a wrong species: with a confidence threshold of 0.8, chosen on the
-  validation cameras, it named 325 test crops correctly with 10 wrong, against
-  SpeciesNet's 300 with 6 wrong. Limiting SpeciesNet to the local species list, without
-  training, already reached 85%.
-- With the adapted layer in `detect` (threshold 0.69, chosen on the validation cameras),
-  **correct events on the test cameras rose from 72 to 92 of 104** and wrong events fell
-  from 16 to 9. Of the 78 test detections it changed, 69 went from not right to right
-  and none from right to wrong.
 - Results imported from LILA's published MegaDetector run matched the toolkit's own
   detections, and every exported package passes Camtrap DP validation.
+
+### Regional adaptation
+
+On all of Snapshot Kgalagadi Season 1 (2,336 animal images from 20 cameras), adapting
+SpeciesNet with `adapt` and using it in `detect` raised **correct independent events on
+seven held-out cameras from 72 to 92 of 104**, and wrong events fell from 16 to 9. The
+gain came mostly from overexposed night images, where correct events rose from 27 to 40
+of 45, and none of the detections it changed on those cameras went from right to wrong.
+The full method, per-species results and limitations are in the
+[case study](docs/case-study-kgalagadi.md).
+
+![Test-camera detections that the adapted layer identified correctly](docs/adapted-examples.jpg)
 
 ## Roadmap
 
@@ -196,7 +196,7 @@ SD card ─► ingest/check ─► detect/events ─► review ─► ecology �
 | Ingest & QA | `ingest`, `check`, `report` | Build the data package, find camera problems, report them | ✅ v0.1.0 |
 | Detection | `detect`, `events`, `import`, `export` | SpeciesNet detection and species identification, independent events, importing other tools' results, validated Camtrap DP export | ✅ v0.2.0 |
 | Review | `review`, `review-stats` | Local web app for checking AI labels, least confident first; review statistics | ✅ v0.3.0 |
-| Evaluation | `evaluate`, `crops`, `adapt` | Per-species accuracy and confidence thresholds; training data and regional fine-tuning | In progress |
+| Evaluation | `evaluate`, `crops`, `adapt` | Per-species accuracy and confidence thresholds; training data and regional fine-tuning | ✅ v0.4.0 |
 | Ecology | `ecology` | Occupancy and activity analysis, and how sensitive results are to AI errors | Planned |
 
 ## Development
@@ -219,4 +219,5 @@ the models. Tests for `adapt` need PyTorch and run when the extra is installed.
 [SpeciesNet](https://github.com/google/cameratrapai) (Apache-2.0), whose MegaDetector
 inference code is GPL-licensed. Snapshot Kgalagadi data used for validation is published by
 [Snapshot Safari](https://lila.science/datasets/snapshot-kgalagadi/) under the
-Community Data License Agreement (permissive) and is not included in this repository.
+Community Data License Agreement (permissive); apart from the example images in `docs/`,
+it is not included in this repository.

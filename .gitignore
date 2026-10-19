@@ -7,3 +7,5 @@ dist/
 data/
 *.JPG
 *.jpg
+# except small figures for the documentation
+!docs/*.jpg
