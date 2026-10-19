@@ -29,6 +29,13 @@ All notable changes to this project are documented here. The format follows
   images, its count is the largest number of individuals in any single image, and the
   command prints independent animal events per taxon and deployment. Rerunning
   replaces earlier event-level observations.
+- `import` command: reads results in the MegaDetector batch format (MegaDetector,
+  AddaxAI, Timelapse, run_md_and_speciesnet) or SpeciesNet's format, matches their
+  image paths to the package even when they are relative to another folder, and writes
+  them as `speciesnet.json` and `observations.csv`, so `events` and later steps work
+  unchanged. Classification taxonomy is kept when it is in SpeciesNet's format; the
+  command reports how many images matched, were ignored or have no results, and
+  images without results are recorded as `unclassified`.
 
 ## [0.1.0] - 2026-10-15
 

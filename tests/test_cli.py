@@ -222,3 +222,37 @@ def test_events_command_needs_observations(make_image, tmp_path):
 
     assert result.exit_code == 1
     assert "run `camtraptools detect` first" in result.output
+
+
+def test_import_command_reports_coverage(make_image, tmp_path):
+    make_image("images/camera_A/IMG_0001.JPG", date_time_original="2024:03:01 06:00:00")
+    make_image("images/camera_A/IMG_0002.JPG", date_time_original="2024:03:01 06:00:00")
+    runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")])
+    results = {
+        "info": {"detector_metadata": {"megadetector_version": "v5a.0.0"}},
+        "detection_categories": {"1": "animal"},
+        "images": [
+            {"file": "survey/camera_A/IMG_0001.JPG", "detections": [{"category": "1", "conf": 0.9, "bbox": [0, 0, 1, 1]}]},
+            {"file": "survey/camera_X/IMG_0001.JPG", "detections": []},
+        ],
+    }
+    (tmp_path / "md.json").write_text(json.dumps(results), encoding="utf-8")
+
+    result = runner.invoke(app, ["import", str(tmp_path / "package"), str(tmp_path / "md.json")])
+
+    assert result.exit_code == 0
+    assert "Imported results for 1 of 2 images." in result.output
+    assert "Ignored 1 images in md.json" in result.output
+    assert "1 images in the package have no results and are marked unclassified." in result.output
+    assert "observations.csv (2 observations)" in result.output
+
+
+def test_import_command_rejects_unrelated_results(make_image, tmp_path):
+    make_image("images/camera_A/IMG_0001.JPG")
+    runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")])
+    (tmp_path / "md.json").write_text(json.dumps({"images": [{"file": "other/IMG_9.JPG", "detections": []}]}), encoding="utf-8")
+
+    result = runner.invoke(app, ["import", str(tmp_path / "package"), str(tmp_path / "md.json")])
+
+    assert result.exit_code == 1
+    assert "none of the images in md.json are in the package" in result.output

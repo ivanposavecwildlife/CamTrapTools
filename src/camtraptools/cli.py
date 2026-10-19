@@ -6,7 +6,7 @@ from typing import Annotated
 import pandas as pd
 import typer
 
-from camtraptools import __version__, check, detect, events, ingest, report
+from camtraptools import __version__, check, detect, events, importer, ingest, report
 
 app = typer.Typer(
     help="CamTrapTools: camera-trap toolkit, from SD card to ecological answers."
@@ -170,6 +170,11 @@ def detect_cmd(
             raise typer.Exit(1)
     else:
         typer.echo(f"Using existing results in {results_file} (pass --rerun to run SpeciesNet again).")
+    report_detections(package, results_file, threshold)
+
+
+def report_detections(package: Path, results_file: Path, threshold: float) -> None:
+    """Print detection and species summaries and write observations.csv."""
     media = pd.read_csv(package / "media.csv")
     detections = detect.load_detections(results_file)
     typer.echo(f"Images with detections at confidence {threshold:g} or higher:")
@@ -183,6 +188,40 @@ def detect_cmd(
         typer.echo(f"{len(failed)} image(s) could not be fully processed, for example {failed[0]}")
     observations = detect.write_observations(package, threshold)
     typer.echo(f"Wrote {results_file} and {package / detect.OBSERVATIONS_FILE} ({len(observations)} observations)")
+
+
+@app.command("import")
+def import_cmd(
+    package: Annotated[
+        Path,
+        typer.Argument(exists=True, file_okay=False, help="Camtrap DP package folder made by `ingest`."),
+    ],
+    results: Annotated[
+        Path,
+        typer.Argument(
+            exists=True, dir_okay=False, help="Results from MegaDetector, AddaxAI, Timelapse or SpeciesNet (.json)."
+        ),
+    ],
+    threshold: Annotated[
+        float, typer.Option(help="Minimum detection confidence for keeping a detection as an observation.")
+    ] = detect.DEFAULT_THRESHOLD,
+) -> None:
+    """Import detection and classification results made by another tool."""
+    if not (package / "media.csv").exists():
+        typer.echo(f"Error: no media.csv in {package}; run `camtraptools ingest` first.", err=True)
+        raise typer.Exit(1)
+    try:
+        matched, ignored = importer.run(package, results)
+    except (ValueError, KeyError) as error:
+        typer.echo(f"Error: could not import {results.name}: {error}", err=True)
+        raise typer.Exit(1)
+    images = len(pd.read_csv(package / "media.csv"))
+    typer.echo(f"Imported results for {matched} of {images} images.")
+    if ignored:
+        typer.echo(f"Ignored {ignored} images in {results.name} that are not in the package.")
+    if matched < images:
+        typer.echo(f"{images - matched} images in the package have no results and are marked unclassified.")
+    report_detections(package, package / detect.RESULTS_FILE, threshold)
 
 
 @app.command("events")

@@ -65,7 +65,7 @@ def parse_taxon(label: str) -> tuple[str | None, str]:
     Labels look like ``uuid;class;order;family;genus;species;common name``. The
     scientific name is the most specific rank given, e.g. ``Oryx gazella`` or
     ``Bovidae``. Special labels (``blank``, ``animal``, ``human``, ``vehicle`` and
-    ``no cv result``, which means unknown) have none.
+    ``no cv result``, which means unknown) and labels without taxonomy have none.
     """
     parts = label.split(";")
     common_name = parts[-1]
@@ -74,8 +74,8 @@ def parse_taxon(label: str) -> tuple[str | None, str]:
     taxon_class, order, family, genus, species = parts[1:6]
     if genus and species:
         return f"{genus.capitalize()} {species}", common_name
-    rank = next(name for name in (genus, family, order, taxon_class) if name)
-    return rank.capitalize(), common_name
+    rank = next((name for name in (genus, family, order, taxon_class) if name), None)
+    return (rank.capitalize() if rank else None), common_name
 
 
 def load_detections(results_file: Path) -> pd.DataFrame:
@@ -181,9 +181,10 @@ def observation_type_and_name(detection) -> tuple[str, str | None]:
 def build_observations(media: pd.DataFrame, results_file: Path, threshold: float) -> pd.DataFrame:
     """Return Camtrap DP media-level observations: one per detection at or above
     ``threshold``, one "blank" per image without any, and one "unclassified" per
-    image SpeciesNet could not process."""
+    image that was not processed or could not be."""
     results = json.loads(results_file.read_text(encoding="utf-8"))
     completion_time = results.get("info", {}).get("completion_time")
+    classifier = results.get("info", {}).get("classifier_name", "SpeciesNet")
     versions = {prediction["filepath"]: prediction.get("model_version") for prediction in results["predictions"]}
     detections = load_detections(results_file)
     confident = detections[detections["conf"] >= threshold]
@@ -198,10 +199,10 @@ def build_observations(media: pd.DataFrame, results_file: Path, threshold: float
             "eventEnd": image.timestamp,
             "observationLevel": "media",
             "classificationMethod": "machine",
-            "classifiedBy": f"SpeciesNet {versions.get(image.filePath) or ''}".strip(),
+            "classifiedBy": f"{classifier} {versions.get(image.filePath) or ''}".strip(),
             "classificationTimestamp": completion_time,
         }
-        if image.filePath in failed:
+        if image.filePath in failed or image.filePath not in versions:
             rows.append({**base, "observationType": "unclassified"})
         elif image.filePath in detections_by_image:
             for detection in detections_by_image[image.filePath].itertuples():
