@@ -48,7 +48,11 @@ def package(make_image, tmp_path):
 
 @pytest.fixture
 def client(package):
-    return TestClient(review.create_app(*package))
+    return TestClient(review.create_app(*package, reviewer="Ivan Posavec"))
+
+
+def form_token(page):
+    return page.split('name="token" value="')[1].split('"')[0]
 
 
 def test_start_page_opens_the_first_event_in_time(client):
@@ -113,3 +117,63 @@ def test_create_app_needs_events(package):
 
     with pytest.raises(ValueError, match="run `camtraptools events` first"):
         review.create_app(package_dir, images)
+
+
+def test_event_page_has_review_form_prefilled_with_ai_decision(client):
+    page = client.get("/events/camera_A-0001").text
+
+    assert 'action="/events/camera_A-0001/review"' in page
+    assert '<option value="animal" selected>' in page
+    assert 'name="scientific_name" list="taxa" value="Oryx gazella"' in page
+    assert 'name="count" type="number" min="1" value="1"' in page
+    assert "Save review as Ivan Posavec" in page
+    assert '<option value="Oryx gazella">gemsbok</option>' in page
+
+
+def test_saving_a_review_moves_to_the_next_event(client):
+    first = client.get("/events/camera_B-0001").text
+    response = client.post(
+        "/events/camera_B-0001/review",
+        data={"token": form_token(first), "observation_type": "animal", "scientific_name": "Canis mesomelas", "count": "1"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/events/camera_A-0001"
+    page = client.get("/events/camera_B-0001").text
+    assert "Reviewed by Ivan Posavec: <strong>Canis mesomelas</strong> · count 1" in page
+
+
+def test_saving_the_last_event_stays_on_it(client):
+    page = client.get("/events/camera_A-0001").text
+    response = client.post(
+        "/events/camera_A-0001/review",
+        data={"token": form_token(page), "observation_type": "blank"},
+        follow_redirects=False,
+    )
+
+    assert response.headers["location"] == "/events/camera_A-0001"
+
+
+def test_review_without_valid_token_is_refused(client):
+    response = client.post("/events/camera_A-0001/review", data={"token": "guess", "observation_type": "blank"})
+
+    assert response.status_code == 403
+
+
+def test_invalid_review_is_rejected_with_reason(client):
+    page = client.get("/events/camera_A-0001").text
+    response = client.post(
+        "/events/camera_A-0001/review",
+        data={"token": form_token(page), "observation_type": "blank", "count": "3"},
+    )
+
+    assert response.status_code == 400
+    assert "has no count" in response.text
+
+
+def test_review_of_unknown_event_is_not_found(client):
+    page = client.get("/events/camera_A-0001").text
+    response = client.post("/events/camera_Z-0001/review", data={"token": form_token(page), "observation_type": "blank"})
+
+    assert response.status_code == 404

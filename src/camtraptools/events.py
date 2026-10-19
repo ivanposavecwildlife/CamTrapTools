@@ -5,6 +5,7 @@ from pathlib import Path
 import pandas as pd
 
 from camtraptools.detect import OBSERVATION_COLUMNS, OBSERVATIONS_FILE
+from camtraptools.reviews import apply_reviews
 
 DEFAULT_GAP_MINUTES = 30
 TYPE_PRIORITY = ["animal", "human", "vehicle", "unknown", "unclassified", "blank"]
@@ -73,7 +74,8 @@ def summarize_events(events: pd.DataFrame) -> pd.DataFrame:
 
 def run(package_dir: Path, gap_minutes: float = DEFAULT_GAP_MINUTES) -> pd.DataFrame:
     """Add event IDs to the media-level observations in the package, append one
-    event-level observation per event to ``observations.csv``, and return them."""
+    event-level observation per event to ``observations.csv``, re-apply human
+    reviews, and return the machine event-level observations."""
     media = pd.read_csv(package_dir / "media.csv", dtype=str)
     observations = pd.read_csv(package_dir / OBSERVATIONS_FILE, dtype=str)
     observations = observations[observations["observationLevel"] == "media"].copy()
@@ -82,4 +84,5 @@ def run(package_dir: Path, gap_minutes: float = DEFAULT_GAP_MINUTES) -> pd.DataF
     events = build_event_observations(observations)
     combined = pd.concat([observations, events], ignore_index=True)
     combined[OBSERVATION_COLUMNS].to_csv(package_dir / OBSERVATIONS_FILE, index=False)
+    apply_reviews(package_dir)
     return events

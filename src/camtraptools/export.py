@@ -9,6 +9,7 @@ import pandas as pd
 
 from camtraptools import __version__
 from camtraptools.detect import OBSERVATION_COLUMNS, OBSERVATIONS_FILE
+from camtraptools.reviews import prefer_human
 
 CAMTRAP_DP_VERSION = "1.0.2"
 CAMTRAP_DP_URL = f"https://raw.githubusercontent.com/tdwg/camtrap-dp/{CAMTRAP_DP_VERSION}"
@@ -147,7 +148,7 @@ def run(
     media = pd.read_csv(package_dir / "media.csv", dtype=str)
     exported_media = export_media(media, timezone)
     observations = export_observations(
-        pd.read_csv(package_dir / OBSERVATIONS_FILE, dtype=str), set(exported_media["mediaID"]), timezone
+        prefer_human(pd.read_csv(package_dir / OBSERVATIONS_FILE, dtype=str)), set(exported_media["mediaID"]), timezone
     )
     out_dir.mkdir(parents=True, exist_ok=True)
     deployments.to_csv(out_dir / "deployments.csv", index=False)

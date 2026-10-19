@@ -12,6 +12,13 @@ All notable changes to this project are documented here. The format follows
   with the AI's bounding boxes, labels and confidences, the event-level decision with its
   vote share and common name, and previous/next navigation with the arrow keys. Only
   images listed in the package can be served.
+- Review decisions: each event page has a form, pre-filled with the AI's decision, to
+  accept or correct the type, scientific name and count. Decisions are stored in
+  `reviews.csv` with the reviewer's name (`--reviewer`) and time, and written to
+  `observations.csv` as event-level observations with `classificationMethod` `human`,
+  next to the machine's. Saving moves to the next event. `events` re-applies reviews,
+  `export` uses the human decision for reviewed events, and forms are protected by a
+  per-session token.
 
 ## [0.2.0] - 2026-10-19
 

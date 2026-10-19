@@ -34,6 +34,17 @@
   .box span { position: absolute; left: -2px; bottom: 100%; background: var(--box); color: var(--box-text);
               font-size: 12px; line-height: 1.4; padding: 0 4px; border-radius: 3px 3px 0 0; white-space: nowrap; }
   figcaption { color: var(--text-secondary); font-size: 13px; margin-top: 4px; }
+  form.review { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 0 0 20px; padding: 12px;
+                border: 1px solid var(--line); border-radius: 8px; }
+  form.review label { display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--text-secondary); }
+  form.review input, form.review select { font: inherit; padding: 4px 8px; border: 1px solid var(--line);
+                border-radius: 6px; background: var(--surface); color: var(--text-primary); }
+  form.review input[name="scientific_name"] { min-width: 260px; }
+  form.review input[name="count"] { width: 5em; }
+  form.review button { font: inherit; padding: 5px 14px; border-radius: 6px; border: 1px solid var(--text-primary);
+                background: var(--text-primary); color: var(--surface); cursor: pointer; }
+  .reviewed { color: var(--text-secondary); margin: 0 0 8px; }
+  .reviewed strong { color: var(--text-primary); }
 </style>
 </head>
 <body>
@@ -59,6 +70,28 @@
     <strong>{{ event.observationType }}</strong>
   {% endif %}
 </p>
+{% if review is not none %}
+<p class="reviewed">✓ Reviewed by {{ review.reviewer }}: <strong>{{ review.scientificName if review.scientificName is string else review.observationType }}</strong>{% if review["count"] is string %} · count {{ review["count"] }}{% endif %}</p>
+{% endif %}
+{% set current = review if review is not none else event %}
+<form class="review" method="post" action="/events/{{ event.eventID }}/review">
+  <input type="hidden" name="token" value="{{ token }}">
+  <label>Type
+    <select name="observation_type">
+      {% for kind in review_types %}<option value="{{ kind }}"{% if kind == current.observationType %} selected{% endif %}>{{ kind }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Scientific name
+    <input name="scientific_name" list="taxa" value="{{ current.scientificName if current.scientificName is string else '' }}" placeholder="e.g. Canis mesomelas">
+  </label>
+  <label>Count
+    <input name="count" type="number" min="1" value="{{ current['count'] | int if current['count'] is string else '' }}">
+  </label>
+  <button type="submit">Save review as {{ reviewer }} ↵</button>
+  <datalist id="taxa">
+    {% for taxon in taxa %}<option value="{{ taxon }}">{{ names.get(taxon, "") }}</option>{% endfor %}
+  </datalist>
+</form>
 <section class="images">
   {% for image in images %}
   <figure>
@@ -77,6 +110,7 @@
 </main>
 <script>
   document.addEventListener("keydown", (event) => {
+    if (event.target.closest("input, select")) return;
     const link = { ArrowLeft: "previous", ArrowRight: "next" }[event.key];
     if (link && document.getElementById(link)) document.getElementById(link).click();
   });

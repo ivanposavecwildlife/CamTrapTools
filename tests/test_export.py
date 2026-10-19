@@ -192,3 +192,17 @@ def test_exported_package_passes_frictionless_validation(tmp_path):
     report = frictionless.validate(tmp_path / "out/datapackage.json")
 
     assert report.valid, report.flatten(["type", "note"])
+
+
+def test_run_exports_the_human_decision_for_reviewed_events(tmp_path):
+    from camtraptools import reviews
+
+    package = make_package(tmp_path / "work")
+    reviews.save_review(package, "camera_A-0001", "animal", "Canis mesomelas", 1, "Ivan Posavec")
+
+    export.run(package, tmp_path / "out", "Test", ["Ivan Posavec"], "Africa/Johannesburg")
+
+    exported = pd.read_csv(tmp_path / "out/observations.csv")
+    event_rows = exported[exported["observationLevel"] == "event"]
+    assert list(event_rows["observationID"]) == ["camera_A-0001-human"]
+    assert event_rows.iloc[0]["classificationMethod"] == "human"

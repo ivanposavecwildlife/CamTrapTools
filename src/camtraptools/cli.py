@@ -313,10 +313,14 @@ def review_cmd(
         Path,
         typer.Option(exists=True, file_okay=False, help="The SD-card folder that was ingested into the package."),
     ],
+    reviewer: Annotated[
+        str | None, typer.Option(help="Name recorded with your review decisions (default: your user name).")
+    ] = None,
     port: Annotated[int, typer.Option(help="Port for the local web server.")] = 8765,
     open_browser: Annotated[bool, typer.Option(help="Open the review page in the browser.")] = True,
 ) -> None:
     """Review the AI's observations in your browser, one event at a time."""
+    import getpass
     import webbrowser
     from threading import Timer
 
@@ -326,7 +330,7 @@ def review_cmd(
         typer.echo(f"Error: no observations.csv in {package}; run `camtraptools detect` first.", err=True)
         raise typer.Exit(1)
     try:
-        app_ = review.create_app(package, images)
+        app_ = review.create_app(package, images, reviewer or getpass.getuser())
     except ValueError as error:
         typer.echo(f"Error: {error}", err=True)
         raise typer.Exit(1)

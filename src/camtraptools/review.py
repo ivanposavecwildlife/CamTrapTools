@@ -1,13 +1,16 @@
 """Local web app for reviewing the AI's observations event by event."""
 
 import json
+import secrets
 from pathlib import Path
+from typing import Annotated
 
 import pandas as pd
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Form, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from jinja2 import Environment, PackageLoader, select_autoescape
 
+from camtraptools import reviews
 from camtraptools.detect import OBSERVATIONS_FILE, RESULTS_FILE, parse_taxon
 
 templates = Environment(loader=PackageLoader("camtraptools"), autoescape=select_autoescape())
@@ -38,12 +41,16 @@ def common_names(package_dir: Path) -> dict[str, str]:
     return names
 
 
-def create_app(package_dir: Path, images_dir: Path) -> FastAPI:
-    """Return the review web app for the package, serving images from ``images_dir``."""
+def create_app(package_dir: Path, images_dir: Path, reviewer: str = "reviewer") -> FastAPI:
+    """Return the review web app for the package, serving images from ``images_dir``
+    and recording decisions under the name ``reviewer``."""
     media, observations = load_review_data(package_dir)
     names = common_names(package_dir)
-    events = observations[observations["observationLevel"] == "event"].sort_values(["eventStart", "eventID"])
+    machine = observations[observations["classificationMethod"] != "human"]
+    events = machine[machine["observationLevel"] == "event"].sort_values(["eventStart", "eventID"])
     event_ids = list(events["eventID"])
+    taxa = sorted(set(machine["scientificName"].dropna()) | set(names))
+    token = secrets.token_urlsafe(16)
     app = FastAPI(title="CamTrapTools review")
 
     @app.get("/")
@@ -61,8 +68,15 @@ def create_app(package_dir: Path, images_dir: Path) -> FastAPI:
             {"media": media.loc[media_id], "detections": group.dropna(subset=["bboxX"]).to_dict("records")}
             for media_id, group in detections.groupby("mediaID", sort=False)
         ]
+        existing = reviews.load_reviews(package_dir)
+        existing = existing[existing["eventID"] == event_id]
         return templates.get_template("event.html").render(
             event=event,
+            review=existing.iloc[0] if not existing.empty else None,
+            review_types=reviews.REVIEW_TYPES,
+            taxa=taxa,
+            token=token,
+            reviewer=reviewer,
             images=images,
             names=names,
             position=position + 1,
@@ -70,6 +84,33 @@ def create_app(package_dir: Path, images_dir: Path) -> FastAPI:
             previous_id=event_ids[position - 1] if position > 0 else None,
             next_id=event_ids[position + 1] if position + 1 < len(event_ids) else None,
         )
+
+    @app.post("/events/{event_id}/review")
+    def save_review(
+        event_id: str,
+        form_token: Annotated[str, Form(alias="token")],
+        observation_type: Annotated[str, Form()],
+        scientific_name: Annotated[str, Form()] = "",
+        count: Annotated[str, Form()] = "",
+    ) -> RedirectResponse:
+        if not secrets.compare_digest(form_token, token):
+            raise HTTPException(status_code=403, detail="invalid form token; reload the page")
+        if event_id not in event_ids:
+            raise HTTPException(status_code=404, detail=f"no event {event_id}")
+        try:
+            reviews.save_review(
+                package_dir,
+                event_id,
+                observation_type,
+                scientific_name.strip() or None,
+                int(count) if count.strip() else None,
+                reviewer,
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        position = event_ids.index(event_id)
+        next_id = event_ids[position + 1] if position + 1 < len(event_ids) else event_id
+        return RedirectResponse(f"/events/{next_id}", status_code=303)
 
     @app.get("/media/{media_id:path}")
     def image(media_id: str) -> FileResponse:
