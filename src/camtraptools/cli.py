@@ -3,9 +3,10 @@
 from pathlib import Path
 from typing import Annotated
 
+import pandas as pd
 import typer
 
-from camtraptools import __version__, check, ingest, report
+from camtraptools import __version__, check, detect, ingest, report
 
 app = typer.Typer(
     help="CamTrapTools: camera-trap toolkit, from SD card to ecological answers."
@@ -129,3 +130,57 @@ def report_cmd(
         )
         raise typer.Exit(1)
     typer.echo(f"Wrote {out}")
+
+
+@app.command("detect")
+def detect_cmd(
+    package: Annotated[
+        Path,
+        typer.Argument(
+            exists=True,
+            file_okay=False,
+            help="Camtrap DP package folder made by `ingest`.",
+        ),
+    ],
+    images: Annotated[
+        Path,
+        typer.Option(
+            exists=True,
+            file_okay=False,
+            help="The SD-card folder that was ingested into the package.",
+        ),
+    ],
+    model: Annotated[
+        str, typer.Option(help="MegaDetector model name or model file.")
+    ] = detect.DEFAULT_MODEL,
+    threshold: Annotated[
+        float,
+        typer.Option(
+            help="Minimum confidence for counting a detection in the summary."
+        ),
+    ] = detect.DEFAULT_THRESHOLD,
+) -> None:
+    """Find animals, people and vehicles in every image with MegaDetector."""
+    if not (package / "media.csv").exists():
+        typer.echo(
+            f"Error: no media.csv in {package}; run `camtraptools ingest` first.",
+            err=True,
+        )
+        raise typer.Exit(1)
+    try:
+        results_file = detect.run(package, images, model)
+    except RuntimeError as error:
+        typer.echo(f"Error: {error}", err=True)
+        raise typer.Exit(1)
+    media = pd.read_csv(package / "media.csv")
+    summary = detect.summarize_detections(
+        media, detect.load_detections(results_file), threshold
+    )
+    typer.echo(f"Images with detections at confidence {threshold:g} or higher:")
+    typer.echo(summary.to_string())
+    failed = detect.failed_images(results_file)
+    if failed:
+        typer.echo(
+            f"{len(failed)} image(s) could not be processed, for example {failed[0]}"
+        )
+    typer.echo(f"Wrote {results_file}")

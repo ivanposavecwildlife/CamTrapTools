@@ -16,6 +16,11 @@ dependencies = [
 [project.scripts]
 camtraptools = "camtraptools.cli:app"
 
+[project.optional-dependencies]
+detect = [
+    "megadetector>=10.0.28",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.3",

@@ -1,3 +1,6 @@
+import json
+import sys
+
 from typer.testing import CliRunner
 
 from camtraptools import __version__
@@ -94,10 +97,14 @@ def test_check_command_needs_an_ingested_package(tmp_path):
 def test_check_command_accepts_max_gap_days(make_image, tmp_path):
     make_image("images/camera_A/IMG_0001.JPG", date_time_original="2024:03:01 06:00:00")
     make_image("images/camera_A/IMG_0002.JPG", date_time_original="2024:03:11 06:00:00")
-    runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")])
+    runner.invoke(
+        app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")]
+    )
 
     default = runner.invoke(app, ["check", str(tmp_path / "package")])
-    strict = runner.invoke(app, ["check", str(tmp_path / "package"), "--max-gap-days", "7"])
+    strict = runner.invoke(
+        app, ["check", str(tmp_path / "package"), "--max-gap-days", "7"]
+    )
 
     assert "  OK" in default.output
     assert "no images for 10.0 days" in strict.output
@@ -105,9 +112,14 @@ def test_check_command_accepts_max_gap_days(make_image, tmp_path):
 
 def test_report_command_writes_html(make_image, tmp_path):
     make_image("images/camera_A/IMG_0001.JPG", date_time_original="2024:03:01 06:00:00")
-    runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")])
+    runner.invoke(
+        app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")]
+    )
 
-    result = runner.invoke(app, ["report", str(tmp_path / "package"), "--out", str(tmp_path / "report.html")])
+    result = runner.invoke(
+        app,
+        ["report", str(tmp_path / "package"), "--out", str(tmp_path / "report.html")],
+    )
 
     assert result.exit_code == 0
     assert (tmp_path / "report.html").exists()
@@ -118,3 +130,51 @@ def test_report_command_needs_an_ingested_package(tmp_path):
 
     assert result.exit_code == 1
     assert "run `camtraptools ingest` first" in result.output
+
+
+def test_detect_command_summarizes_results(make_image, monkeypatch, tmp_path):
+    make_image("images/camera_A/IMG_0001.JPG", date_time_original="2024:03:01 06:00:00")
+    runner.invoke(
+        app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")]
+    )
+
+    def fake_run(package, images, model):
+        results = {
+            "images": [
+                {
+                    "file": "camera_A/IMG_0001.JPG",
+                    "detections": [
+                        {"category": "1", "conf": 0.9, "bbox": [0, 0, 1, 1]}
+                    ],
+                }
+            ],
+            "detection_categories": {"1": "animal", "2": "person", "3": "vehicle"},
+        }
+        results_file = package / "megadetector.json"
+        results_file.write_text(json.dumps(results), encoding="utf-8")
+        return results_file
+
+    monkeypatch.setattr("camtraptools.detect.run", fake_run)
+
+    result = runner.invoke(
+        app, ["detect", str(tmp_path / "package"), "--images", str(tmp_path / "images")]
+    )
+
+    assert result.exit_code == 0
+    assert "camera_A" in result.output
+    assert "megadetector.json" in result.output
+
+
+def test_detect_command_explains_missing_extra(make_image, monkeypatch, tmp_path):
+    make_image("images/camera_A/IMG_0001.JPG")
+    runner.invoke(
+        app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")]
+    )
+    monkeypatch.setitem(sys.modules, "megadetector", None)
+
+    result = runner.invoke(
+        app, ["detect", str(tmp_path / "package"), "--images", str(tmp_path / "images")]
+    )
+
+    assert result.exit_code == 1
+    assert "uv sync --extra detect" in result.output
