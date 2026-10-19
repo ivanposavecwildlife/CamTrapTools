@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>All events · CamTrapTools review</title>
+<style>
+  :root { color-scheme: light; --surface: #fcfcfb; --text-primary: #0b0b0b; --text-secondary: #52514e; --line: #e4e2dd; --good: #0ca30c; }
+  @media (prefers-color-scheme: dark) {
+    :root { color-scheme: dark; --surface: #1a1a19; --text-primary: #ffffff; --text-secondary: #c3c2b7; --line: #383835; }
+  }
+  body { margin: 0; background: var(--surface); color: var(--text-primary); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1000px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .meta { color: var(--text-secondary); margin: 0 0 16px; }
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  thead th { color: var(--text-secondary); font-weight: 600; font-size: 13px; }
+  .num { text-align: right; }
+  a { color: inherit; }
+  .done { color: var(--good); }
+</style>
+</head>
+<body>
+<main>
+<h1>All events</h1>
+{% set reviewed = events | selectattr("eventID", "in", done.index) | list | length %}
+<p class="meta">{{ reviewed }} of {{ events | length }} reviewed · {{ "least confident first" if order == "uncertainty" else "in time order" }}{% if reviewed == events | length %} · ✓ all done{% endif %}</p>
+<div class="table-scroll">
+<table>
+<thead><tr><th scope="col">Event</th><th scope="col">Start</th><th scope="col">AI decision</th><th scope="col" class="num">AI confidence</th><th scope="col">Review</th></tr></thead>
+<tbody>
+{% for event in events %}
+<tr>
+  <th scope="row"><a href="/events/{{ event.eventID }}">{{ event.eventID }}</a></th>
+  <td>{{ event.eventStart }}</td>
+  <td>{{ event.scientificName if event.scientificName is string else event.observationType }}</td>
+  <td class="num">{{ "%.2f" | format(event.confidence) }}</td>
+  <td>{% if event.eventID in done.index %}{% set review = done.loc[event.eventID] %}<span class="done">✓</span> {{ review.scientificName if review.scientificName is string else review.observationType }}{% else %}–{% endif %}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+</main>
+</body>
+</html>

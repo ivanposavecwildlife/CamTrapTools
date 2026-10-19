@@ -2,6 +2,7 @@
 
 import json
 import secrets
+import socket
 from pathlib import Path
 from typing import Annotated
 
@@ -41,34 +42,102 @@ def common_names(package_dir: Path) -> dict[str, str]:
     return names
 
 
-def create_app(package_dir: Path, images_dir: Path, reviewer: str = "reviewer") -> FastAPI:
-    """Return the review web app for the package, serving images from ``images_dir``
-    and recording decisions under the name ``reviewer``."""
+ORDERS = ["uncertainty", "time"]
+
+
+def event_confidence(event: pd.Series, media_observations: pd.DataFrame) -> float:
+    """Return how confident the AI was about an event, from 0 to 1.
+
+    It is the event's vote share times the best classifier probability for the
+    chosen label. Unknown events score 0, and animals not identified to species
+    are capped at 0.5, so the events most likely to need a human come first.
+    """
+    if event["observationType"] in ("unknown", "unclassified"):
+        return 0.0
+    matching = media_observations[media_observations["observationType"] == event["observationType"]]
+    if event["observationType"] == "animal":
+        matching = matching[matching["scientificName"].fillna("") == (event["scientificName"] if isinstance(event["scientificName"], str) else "")]
+    probabilities = pd.to_numeric(matching["classificationProbability"]).dropna()
+    best = probabilities.max() if not probabilities.empty else (1.0 if event["observationType"] == "blank" else 0.5)
+    share = pd.to_numeric(pd.Series([event["classificationProbability"]])).fillna(1.0).iloc[0]
+    confidence = float(share * best)
+    if event["observationType"] == "animal" and " " not in str(event["scientificName"] if isinstance(event["scientificName"], str) else ""):
+        confidence = min(confidence, 0.5)
+    return round(confidence, 3)
+
+
+def order_events(events: pd.DataFrame, observations: pd.DataFrame, order: str) -> pd.DataFrame:
+    """Return the events with a ``confidence`` column, sorted for review: least
+    confident first (``uncertainty``) or by start time (``time``)."""
+    media_level = observations[observations["observationLevel"] == "media"]
+    by_event = dict(list(media_level.groupby("eventID")))
+    empty = media_level.iloc[0:0]
+    events = events.assign(
+        confidence=[event_confidence(event, by_event.get(event["eventID"], empty)) for _, event in events.iterrows()]
+    )
+    columns = ["confidence", "eventStart", "eventID"] if order == "uncertainty" else ["eventStart", "eventID"]
+    return events.sort_values(columns).reset_index(drop=True)
+
+
+def free_port(preferred: int) -> int:
+    """Return ``preferred`` if it is free on this computer, otherwise any free port."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        try:
+            probe.bind(("127.0.0.1", preferred))
+            return preferred
+        except OSError:
+            probe.bind(("127.0.0.1", 0))
+            return probe.getsockname()[1]
+
+
+def create_app(package_dir: Path, images_dir: Path, reviewer: str = "reviewer", order: str = "uncertainty") -> FastAPI:
+    """Return the review web app for the package, serving images from ``images_dir``,
+    recording decisions under the name ``reviewer`` and showing events in ``order``."""
     media, observations = load_review_data(package_dir)
     names = common_names(package_dir)
     machine = observations[observations["classificationMethod"] != "human"]
-    events = machine[machine["observationLevel"] == "event"].sort_values(["eventStart", "eventID"])
+    events = order_events(machine[machine["observationLevel"] == "event"], machine, order)
     event_ids = list(events["eventID"])
     taxa = sorted(set(machine["scientificName"].dropna()) | set(names))
     token = secrets.token_urlsafe(16)
     app = FastAPI(title="CamTrapTools review")
 
+    def reviewed_ids() -> set[str]:
+        return set(reviews.load_reviews(package_dir)["eventID"])
+
+    def next_to_review(after: int = -1) -> str | None:
+        done = reviewed_ids()
+        for event_id in event_ids[after + 1 :] + event_ids[: after + 1]:
+            if event_id not in done:
+                return event_id
+        return None
+
     @app.get("/")
-    def first_event() -> RedirectResponse:
-        return RedirectResponse(f"/events/{event_ids[0]}")
+    def start() -> RedirectResponse:
+        event_id = next_to_review()
+        return RedirectResponse(f"/events/{event_id}" if event_id else "/events")
+
+    @app.get("/events", response_class=HTMLResponse)
+    def list_events() -> str:
+        done = reviews.load_reviews(package_dir).set_index("eventID")
+        return templates.get_template("events.html").render(
+            events=events.to_dict("records"), done=done, names=names, order=order
+        )
 
     @app.get("/events/{event_id}", response_class=HTMLResponse)
     def show_event(event_id: str) -> str:
         if event_id not in event_ids:
             raise HTTPException(status_code=404, detail=f"no event {event_id}")
         position = event_ids.index(event_id)
-        event = events[events["eventID"] == event_id].iloc[0]
+        event = events.iloc[position]
         detections = observations[(observations["eventID"] == event_id) & (observations["observationLevel"] == "media")]
+        detections = detections[detections["classificationMethod"] != "human"]
         images = [
             {"media": media.loc[media_id], "detections": group.dropna(subset=["bboxX"]).to_dict("records")}
             for media_id, group in detections.groupby("mediaID", sort=False)
         ]
         existing = reviews.load_reviews(package_dir)
+        reviewed = len(set(existing["eventID"]) & set(event_ids))
         existing = existing[existing["eventID"] == event_id]
         return templates.get_template("event.html").render(
             event=event,
@@ -79,6 +148,8 @@ def create_app(package_dir: Path, images_dir: Path, reviewer: str = "reviewer") 
             reviewer=reviewer,
             images=images,
             names=names,
+            order=order,
+            reviewed=reviewed,
             position=position + 1,
             total=len(event_ids),
             previous_id=event_ids[position - 1] if position > 0 else None,
@@ -108,9 +179,8 @@ def create_app(package_dir: Path, images_dir: Path, reviewer: str = "reviewer") 
             )
         except ValueError as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
-        position = event_ids.index(event_id)
-        next_id = event_ids[position + 1] if position + 1 < len(event_ids) else event_id
-        return RedirectResponse(f"/events/{next_id}", status_code=303)
+        next_id = next_to_review(event_ids.index(event_id))
+        return RedirectResponse(f"/events/{next_id}" if next_id else "/events", status_code=303)
 
     @app.get("/media/{media_id:path}")
     def image(media_id: str) -> FileResponse:

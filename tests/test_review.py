@@ -55,11 +55,17 @@ def form_token(page):
     return page.split('name="token" value="')[1].split('"')[0]
 
 
-def test_start_page_opens_the_first_event_in_time(client):
+def test_start_page_opens_the_least_confident_event(client):
     response = client.get("/", follow_redirects=False)
 
     assert response.status_code == 307
-    assert response.headers["location"] == "/events/camera_B-0001"
+    assert response.headers["location"] == "/events/camera_A-0001"
+
+
+def test_time_order_starts_with_the_earliest_event(package):
+    client = TestClient(review.create_app(*package, order="time"))
+
+    assert client.get("/", follow_redirects=False).headers["location"] == "/events/camera_B-0001"
 
 
 def test_event_page_shows_decision_boxes_and_navigation(client):
@@ -70,9 +76,11 @@ def test_event_page_shows_decision_boxes_and_navigation(client):
     assert "vote share 100%" in page
     assert 'src="/media/camera_A/IMG_0001.JPG"' in page
     assert "left: 10.0%; top: 20.0%; width: 30.0%; height: 40.0%;" in page
-    assert "2 of 2" in page
-    assert 'href="/events/camera_B-0001" id="previous"' in page
-    assert 'id="next"' not in page
+    assert "1 of 2 · least confident first" in page
+    assert "AI confidence 0.99" in page
+    assert "0 of 2 reviewed" in page
+    assert 'id="previous"' not in page
+    assert 'href="/events/camera_B-0001" id="next"' in page
 
 
 def test_blank_event_page(client):
@@ -144,15 +152,78 @@ def test_saving_a_review_moves_to_the_next_event(client):
     assert "Reviewed by Ivan Posavec: <strong>Canis mesomelas</strong> · count 1" in page
 
 
-def test_saving_the_last_event_stays_on_it(client):
-    page = client.get("/events/camera_A-0001").text
-    response = client.post(
-        "/events/camera_A-0001/review",
-        data={"token": form_token(page), "observation_type": "blank"},
-        follow_redirects=False,
-    )
+def test_after_the_last_review_the_event_list_opens(client):
+    token = form_token(client.get("/events/camera_A-0001").text)
+    for event_id in ("camera_A-0001", "camera_B-0001"):
+        response = client.post(
+            f"/events/{event_id}/review", data={"token": token, "observation_type": "blank"}, follow_redirects=False
+        )
 
-    assert response.headers["location"] == "/events/camera_A-0001"
+    assert response.headers["location"] == "/events"
+    assert client.get("/", follow_redirects=False).headers["location"] == "/events"
+    page = client.get("/events").text
+    assert "2 of 2 reviewed" in page
+    assert "✓ all done" in page
+
+
+def test_event_list_shows_order_confidence_and_reviews(client):
+    token = form_token(client.get("/events/camera_A-0001").text)
+    client.post("/events/camera_A-0001/review", data={"token": token, "observation_type": "animal", "scientific_name": "Canis mesomelas", "count": "1"})
+
+    page = client.get("/events").text
+
+    assert page.index("camera_A-0001") < page.index("camera_B-0001")
+    assert "<td class=\"num\">0.99</td>" in page
+    assert "✓</span> Canis mesomelas" in page
+    assert "1 of 2 reviewed" in page
+
+
+def test_event_page_lists_keyboard_shortcuts(client):
+    page = client.get("/events/camera_A-0001").text
+
+    assert "<kbd>B</kbd> blank" in page
+    assert 'form.observation_type.value = "blank"' in page
+
+
+def media_rows(*rows):
+    return pd.DataFrame(rows, columns=["observationType", "scientificName", "classificationProbability"])
+
+
+@pytest.mark.parametrize(
+    ("event", "media", "expected"),
+    [
+        ({"observationType": "unknown", "scientificName": None, "classificationProbability": None}, media_rows(), 0.0),
+        (
+            {"observationType": "animal", "scientificName": "Oryx gazella", "classificationProbability": "0.8"},
+            media_rows(("animal", "Oryx gazella", "0.9"), ("animal", "Oryx gazella", "0.6"), ("animal", "Bovidae", "0.99")),
+            0.72,
+        ),
+        (
+            {"observationType": "animal", "scientificName": "Bovidae", "classificationProbability": "1.0"},
+            media_rows(("animal", "Bovidae", "0.97")),
+            0.5,
+        ),
+        ({"observationType": "blank", "scientificName": None, "classificationProbability": None}, media_rows(("blank", None, None)), 1.0),
+        ({"observationType": "blank", "scientificName": None, "classificationProbability": None}, media_rows(("blank", None, "0.8")), 0.8),
+    ],
+)
+def test_event_confidence(event, media, expected):
+    assert review.event_confidence(pd.Series(event), media) == expected
+
+
+def test_free_port_avoids_a_busy_port():
+    import socket
+
+    with socket.socket() as busy:
+        busy.bind(("127.0.0.1", 0))
+        busy.listen()
+        taken = busy.getsockname()[1]
+
+        assert review.free_port(taken) != taken
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        free = probe.getsockname()[1]
+    assert review.free_port(free) == free
 
 
 def test_review_without_valid_token_is_refused(client):

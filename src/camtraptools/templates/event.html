@@ -44,6 +44,10 @@
   form.review button { font: inherit; padding: 5px 14px; border-radius: 6px; border: 1px solid var(--text-primary);
                 background: var(--text-primary); color: var(--surface); cursor: pointer; }
   .reviewed { color: var(--text-secondary); margin: 0 0 8px; }
+  .progress { display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 13px; }
+  .progress progress { width: 120px; }
+  .keys { color: var(--text-secondary); font-size: 13px; margin: 0 0 16px; }
+  kbd { font: 12px ui-monospace, monospace; padding: 1px 5px; border: 1px solid var(--line); border-radius: 4px; }
   .reviewed strong { color: var(--text-primary); }
 </style>
 </head>
@@ -54,9 +58,13 @@
     <h1>Camera {{ event.deploymentID }} · event {{ event.eventID }}</h1>
     <p class="meta">{{ event.eventStart }}{% if event.eventEnd != event.eventStart %} to {{ event.eventEnd }}{% endif %} · {{ images | length }} image(s)</p>
   </div>
+  <div class="progress">
+    <progress max="{{ total }}" value="{{ reviewed }}"></progress>
+    <span>{{ reviewed }} of {{ total }} reviewed · <a href="/events">all events</a></span>
+  </div>
   <nav>
     {% if previous_id %}<a href="/events/{{ previous_id }}" id="previous">← Previous</a>{% else %}<span class="disabled">← Previous</span>{% endif %}
-    <span>{{ position }} of {{ total }}</span>
+    <span>{{ position }} of {{ total }}{% if order == "uncertainty" %} · least confident first{% endif %}</span>
     {% if next_id %}<a href="/events/{{ next_id }}" id="next">Next →</a>{% else %}<span class="disabled">Next →</span>{% endif %}
   </nav>
 </header>
@@ -69,7 +77,9 @@
   {% else %}
     <strong>{{ event.observationType }}</strong>
   {% endif %}
+  · AI confidence {{ "%.2f" | format(event.confidence) }}
 </p>
+<p class="keys"><kbd>Enter</kbd> or <kbd>A</kbd> save · <kbd>B</kbd> blank · <kbd>1</kbd>–<kbd>9</kbd> count · <kbd>S</kbd> species · <kbd>←</kbd> <kbd>→</kbd> previous / next · <kbd>Esc</kbd> leave a field</p>
 {% if review is not none %}
 <p class="reviewed">✓ Reviewed by {{ review.reviewer }}: <strong>{{ review.scientificName if review.scientificName is string else review.observationType }}</strong>{% if review["count"] is string %} · count {{ review["count"] }}{% endif %}</p>
 {% endif %}
@@ -109,10 +119,29 @@
 </section>
 </main>
 <script>
+  const form = document.querySelector("form.review");
   document.addEventListener("keydown", (event) => {
-    if (event.target.closest("input, select")) return;
+    if (event.target.closest("input, select")) {
+      if (event.key === "Escape") event.target.blur();
+      return;
+    }
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
     const link = { ArrowLeft: "previous", ArrowRight: "next" }[event.key];
-    if (link && document.getElementById(link)) document.getElementById(link).click();
+    if (link && document.getElementById(link)) {
+      document.getElementById(link).click();
+    } else if (event.key === "Enter" || event.key === "a") {
+      form.requestSubmit();
+    } else if (event.key === "b") {
+      form.observation_type.value = "blank";
+      form.scientific_name.value = "";
+      form.count.value = "";
+      form.requestSubmit();
+    } else if (/^[1-9]$/.test(event.key)) {
+      form.count.value = event.key;
+    } else if (event.key === "s") {
+      event.preventDefault();
+      form.scientific_name.select();
+    }
   });
 </script>
 </body>

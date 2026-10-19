@@ -19,6 +19,14 @@ All notable changes to this project are documented here. The format follows
   next to the machine's. Saving moves to the next event. `events` re-applies reviews,
   `export` uses the human decision for reviewed events, and forms are protected by a
   per-session token.
+- The review app shows events least confident first (`--order uncertainty`, the default,
+  or `--order time`), scoring each event by its vote share and best classifier
+  probability, with animals not identified to species capped at 0.5. It starts at the
+  least confident unreviewed event and, after saving, moves to the next unreviewed one.
+- Review progress on every page, an "all events" page with confidence and review status,
+  and keyboard shortcuts: Enter or A to save, B for blank, 1–9 for the count, S for the
+  species field and the arrow keys to move between events.
+- `review` uses another port when the requested one is in use, and says so.
 
 ## [0.2.0] - 2026-10-19
 

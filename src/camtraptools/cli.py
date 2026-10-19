@@ -316,7 +316,10 @@ def review_cmd(
     reviewer: Annotated[
         str | None, typer.Option(help="Name recorded with your review decisions (default: your user name).")
     ] = None,
-    port: Annotated[int, typer.Option(help="Port for the local web server.")] = 8765,
+    order: Annotated[
+        str, typer.Option(help="Order of events: uncertainty (least confident first) or time.")
+    ] = "uncertainty",
+    port: Annotated[int, typer.Option(help="Port for the local web server; another is used if it is busy.")] = 8765,
     open_browser: Annotated[bool, typer.Option(help="Open the review page in the browser.")] = True,
 ) -> None:
     """Review the AI's observations in your browser, one event at a time."""
@@ -329,11 +332,18 @@ def review_cmd(
     if not (package / detect.OBSERVATIONS_FILE).exists():
         typer.echo(f"Error: no observations.csv in {package}; run `camtraptools detect` first.", err=True)
         raise typer.Exit(1)
+    if order not in review.ORDERS:
+        typer.echo(f"Error: --order must be one of: {', '.join(review.ORDERS)}.", err=True)
+        raise typer.Exit(1)
     try:
-        app_ = review.create_app(package, images, reviewer or getpass.getuser())
+        app_ = review.create_app(package, images, reviewer or getpass.getuser(), order)
     except ValueError as error:
         typer.echo(f"Error: {error}", err=True)
         raise typer.Exit(1)
+    free = review.free_port(port)
+    if free != port:
+        typer.echo(f"Port {port} is in use by another program; using {free} instead.")
+    port = free
     url = f"http://127.0.0.1:{port}/"
     typer.echo(f"Reviewing {package} at {url} (press Ctrl+C to stop)")
     if open_browser:
