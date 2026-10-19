@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `evaluate` command: compares the AI's event-level decisions with ground truth, either
+  the package's reviews or a CSV of image labels (`--truth`, with `filePath` and
+  `scientificName` and optional `genus`, `family`, `order` and `class` columns). Each
+  event is correct, correct only above species level (verified against the true
+  taxon's ancestry), unverified, or wrong. The command prints per-label precision and
+  recall and every event that was not correct, and writes `evaluation.csv`.
+
 ## [0.3.0] - 2026-10-19
 
 Human review: a local web app that shows the AI's least confident decisions first and

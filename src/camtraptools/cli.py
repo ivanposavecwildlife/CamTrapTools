@@ -11,6 +11,7 @@ from camtraptools import (
     __version__,
     check,
     detect,
+    evaluate,
     events,
     export,
     importer,
@@ -385,3 +386,40 @@ def review_stats_cmd(
     speed = review_data.review_speed(compared["reviewedAt"])
     if speed["perMinute"]:
         typer.echo(f"\nSpeed: {speed['perMinute']} decisions per minute over {speed['minutes']} active minutes.")
+
+
+@app.command("evaluate")
+def evaluate_cmd(
+    package: Annotated[
+        Path,
+        typer.Argument(exists=True, file_okay=False, help="Package folder with events from `camtraptools events`."),
+    ],
+    truth: Annotated[
+        Path | None,
+        typer.Option(
+            exists=True, dir_okay=False, help="CSV of image labels (filePath, scientificName); default: the reviews."
+        ),
+    ] = None,
+) -> None:
+    """Measure the AI against ground truth: accuracy, precision, recall and confusions."""
+    if not (package / detect.OBSERVATIONS_FILE).exists():
+        typer.echo(f"Error: no observations.csv in {package}; run `camtraptools detect` first.", err=True)
+        raise typer.Exit(1)
+    compared = evaluate.run(package, truth)
+    if compared.empty:
+        source = truth.name if truth else "reviews"
+        typer.echo(f"No events to evaluate: {source} has no labels for this package's events.")
+        raise typer.Exit(1)
+    source = f"labels in {truth.name}" if truth else "your reviews"
+    typer.echo(f"Compared {len(compared)} events with {source}.")
+    outcomes = compared["outcome"].value_counts().reindex(evaluate.OUTCOMES, fill_value=0)
+    for outcome, count in outcomes.items():
+        typer.echo(f"  {outcome}: {count} ({count / len(compared):.0%})")
+    typer.echo("\nPer label:")
+    typer.echo(evaluate.per_class_metrics(compared).to_string(na_rep="–"))
+    mistakes = compared[compared["outcome"] != "correct"]
+    if not mistakes.empty:
+        typer.echo("\nNot correct (truth → AI):")
+        for row in mistakes.itertuples():
+            typer.echo(f"  {row.eventID}: {row.truth} → {row.ai} ({row.outcome})")
+    typer.echo(f"\nWrote {package / evaluate.EVALUATION_FILE}")

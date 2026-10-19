@@ -401,3 +401,33 @@ def test_review_stats_command_reports_corrections(make_image, tmp_path):
     assert result.exit_code == 0
     assert "Reviewed 1 of 1 events; agreed with the AI on 0 (0%)." in result.output
     assert "camera_A-0001: Oryx gazella → Canis mesomelas" in result.output
+
+
+def test_evaluate_command_reports_metrics(make_image, tmp_path):
+    make_image("images/camera_A/IMG_0001.JPG", date_time_original="2024:03:01 06:00:00")
+    runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")])
+    write_speciesnet_results(tmp_path / "package", 0.9)
+    runner.invoke(app, ["detect", str(tmp_path / "package")])
+    runner.invoke(app, ["events", str(tmp_path / "package")])
+    truth = tmp_path / "truth.csv"
+    truth.write_text("filePath,scientificName\ncamera_A/IMG_0001.JPG,Canis mesomelas\n")
+
+    result = runner.invoke(app, ["evaluate", str(tmp_path / "package"), "--truth", str(truth)])
+
+    assert result.exit_code == 0, result.output
+    assert "Compared 1 events with labels in truth.csv." in result.output
+    assert "wrong: 1 (100%)" in result.output
+    assert "camera_A-0001: Canis mesomelas → Oryx gazella (wrong)" in result.output
+
+
+def test_evaluate_command_without_truth(make_image, tmp_path):
+    make_image("images/camera_A/IMG_0001.JPG", date_time_original="2024:03:01 06:00:00")
+    runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")])
+    write_speciesnet_results(tmp_path / "package", 0.9)
+    runner.invoke(app, ["detect", str(tmp_path / "package")])
+    runner.invoke(app, ["events", str(tmp_path / "package")])
+
+    result = runner.invoke(app, ["evaluate", str(tmp_path / "package")])
+
+    assert result.exit_code == 1
+    assert "No events to evaluate: reviews has no labels" in result.output
