@@ -400,8 +400,18 @@ def evaluate_cmd(
             exists=True, dir_okay=False, help="CSV of image labels (filePath, scientificName); default: the reviews."
         ),
     ] = None,
+    target_precision: Annotated[
+        float, typer.Option(help="Precision each label's confidence threshold should reach.")
+    ] = evaluate.DEFAULT_TARGET_PRECISION,
+    report: Annotated[Path | None, typer.Option(help="Write an HTML report of the mistakes, with images.")] = None,
+    images: Annotated[
+        Path | None, typer.Option(exists=True, file_okay=False, help="The SD-card folder, needed for --report.")
+    ] = None,
 ) -> None:
-    """Measure the AI against ground truth: accuracy, precision, recall and confusions."""
+    """Measure the AI against ground truth: precision, recall, thresholds and mistakes."""
+    if report is not None and images is None:
+        typer.echo("Error: --report needs --images to show the photos.", err=True)
+        raise typer.Exit(1)
     if not (package / detect.OBSERVATIONS_FILE).exists():
         typer.echo(f"Error: no observations.csv in {package}; run `camtraptools detect` first.", err=True)
         raise typer.Exit(1)
@@ -417,9 +427,17 @@ def evaluate_cmd(
         typer.echo(f"  {outcome}: {count} ({count / len(compared):.0%})")
     typer.echo("\nPer label:")
     typer.echo(evaluate.per_class_metrics(compared).to_string(na_rep="–"))
+    typer.echo(f"\nConfidence thresholds for {target_precision:.0%} precision (⚠ = under ten answers, unreliable):")
+    table = evaluate.thresholds(compared, target_precision)
+    table["fewAnswers"] = table["fewAnswers"].map({True: "⚠", False: ""})
+    table["threshold"] = table["threshold"].map(lambda value: "never" if pd.isna(value) else f"{value:.3f}")
+    typer.echo(table.to_string(na_rep="–"))
     mistakes = compared[compared["outcome"] != "correct"]
     if not mistakes.empty:
         typer.echo("\nNot correct (truth → AI):")
         for row in mistakes.itertuples():
             typer.echo(f"  {row.eventID}: {row.truth} → {row.ai} ({row.outcome})")
     typer.echo(f"\nWrote {package / evaluate.EVALUATION_FILE}")
+    if report is not None:
+        report.write_text(evaluate.failure_report(package, images, compared, target_precision), encoding="utf-8")
+        typer.echo(f"Wrote {report}")

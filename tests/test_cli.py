@@ -431,3 +431,35 @@ def test_evaluate_command_without_truth(make_image, tmp_path):
 
     assert result.exit_code == 1
     assert "No events to evaluate: reviews has no labels" in result.output
+
+
+def test_evaluate_command_writes_report(make_image, tmp_path):
+    make_image("images/camera_A/IMG_0001.JPG", date_time_original="2024:03:01 06:00:00")
+    runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")])
+    write_speciesnet_results(tmp_path / "package", 0.9)
+    runner.invoke(app, ["detect", str(tmp_path / "package")])
+    runner.invoke(app, ["events", str(tmp_path / "package")])
+    truth = tmp_path / "truth.csv"
+    truth.write_text("filePath,scientificName\ncamera_A/IMG_0001.JPG,Canis mesomelas\n")
+    report = tmp_path / "report.html"
+
+    result = runner.invoke(
+        app,
+        ["evaluate", str(tmp_path / "package"), "--truth", str(truth), "--report", str(report), "--images", str(tmp_path / "images")],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Confidence thresholds for 95% precision" in result.output
+    assert "camera_A-0001 · true: Canis mesomelas · AI: Oryx gazella · wrong" in report.read_text(encoding="utf-8")
+
+
+def test_evaluate_report_needs_images(make_image, tmp_path):
+    make_image("images/camera_A/IMG_0001.JPG")
+    runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")])
+    write_speciesnet_results(tmp_path / "package", 0.9)
+    runner.invoke(app, ["detect", str(tmp_path / "package")])
+
+    result = runner.invoke(app, ["evaluate", str(tmp_path / "package"), "--report", str(tmp_path / "r.html")])
+
+    assert result.exit_code == 1
+    assert "--report needs --images" in result.output

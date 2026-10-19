@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI evaluation: {{ package }}</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface: #fcfcfb; --text-primary: #0b0b0b; --text-secondary: #52514e; --line: #e4e2dd;
+    --good: #0ca30c; --warning: #fab219; --critical: #d03b3b; --box: #fab219;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { color-scheme: dark; --surface: #1a1a19; --text-primary: #ffffff; --text-secondary: #c3c2b7; --line: #383835; }
+  }
+  body { margin: 0; background: var(--surface); color: var(--text-primary); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1000px; margin: 0 auto; padding: 32px 16px 48px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 18px; margin: 36px 0 8px; }
+  h3 { font-size: 15px; margin: 0 0 8px; }
+  .meta, .note { color: var(--text-secondary); margin: 0; }
+  .facts { display: flex; gap: 32px; margin: 24px 0 0; flex-wrap: wrap; }
+  .facts div { display: flex; flex-direction: column; }
+  .facts strong { font-size: 28px; font-variant-numeric: tabular-nums; }
+  .facts span { color: var(--text-secondary); }
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; margin-top: 8px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  thead th { color: var(--text-secondary); font-weight: 600; font-size: 13px; }
+  .num { text-align: right; }
+  .icon.good { color: var(--good); } .icon.warning { color: var(--warning); } .icon.critical { color: var(--critical); }
+  article { border-top: 1px solid var(--line); padding: 16px 0; }
+  .images { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+  figure { margin: 0; }
+  .frame { position: relative; line-height: 0; }
+  .frame img { width: 100%; height: auto; border-radius: 4px; }
+  .box { position: absolute; border: 2px solid var(--box); box-sizing: border-box; border-radius: 2px; }
+  .box span { position: absolute; left: -2px; bottom: 100%; background: var(--box); color: #0b0b0b; font-size: 11px; line-height: 1.4; padding: 0 3px; white-space: nowrap; }
+  figcaption { color: var(--text-secondary); font-size: 12px; margin-top: 2px; }
+  footer { margin-top: 48px; color: var(--text-secondary); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+<h1>AI evaluation</h1>
+<p class="meta">Package <strong>{{ package }}</strong> · generated {{ generated }}</p>
+<div class="facts">
+  <div><strong>{{ total }}</strong><span>events compared</span></div>
+  {% for name, count in outcomes.items() %}
+  <div><strong>{{ count }}</strong><span>{{ name }} ({{ (count / total * 100) | round | int }}%)</span></div>
+  {% endfor %}
+</div>
+
+<h2>Precision and recall per label</h2>
+<p class="note">Precision: of the events the AI gave a label, the share where it was true. Recall: of the events that truly had a label, the share the AI named exactly.</p>
+<div class="table-scroll">
+<table>
+<thead><tr><th scope="col">Label</th><th scope="col" class="num">True events</th><th scope="col" class="num">AI answers</th><th scope="col" class="num">Precision</th><th scope="col" class="num">Recall</th></tr></thead>
+<tbody>
+{% for row in metrics %}
+<tr><th scope="row">{{ row.label }}</th><td class="num">{{ row.events }}</td><td class="num">{{ row.predicted }}</td>
+<td class="num">{{ "%.2f" | format(row.precision) if row.precision is not none and row.precision == row.precision else "–" }}</td>
+<td class="num">{{ "%.2f" | format(row.recall) if row.recall is not none and row.recall == row.recall else "–" }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+
+<h2>Confidence thresholds for {{ (target_precision * 100) | round | int }}% precision</h2>
+<p class="note">Answers at or above a label's threshold can be trusted; review the rest. ⚠ marks labels with fewer than ten answers, whose thresholds are unreliable.</p>
+<div class="table-scroll">
+<table>
+<thead><tr><th scope="col">AI label</th><th scope="col" class="num">Answers</th><th scope="col" class="num">Precision</th><th scope="col" class="num">Threshold</th><th scope="col" class="num">Kept</th><th scope="col"></th></tr></thead>
+<tbody>
+{% for row in thresholds %}
+<tr><th scope="row">{{ row.label }}</th><td class="num">{{ row.answers }}</td><td class="num">{{ "%.2f" | format(row.precision) }}</td>
+<td class="num">{{ "%.2f" | format(row.threshold) if row.threshold is not none and row.threshold == row.threshold else "never" }}</td>
+<td class="num">{{ row.kept }}</td>
+<td>{% if row.fewAnswers %}<span class="icon warning">⚠</span> few answers{% endif %}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+
+<h2>Events the AI did not get exactly right ({{ failures | length }})</h2>
+{% for failure in failures %}
+{% set event = failure.event %}
+<article>
+  <h3>
+    {% if event.outcome == "wrong" %}<span class="icon critical">✕</span>{% else %}<span class="icon warning">◐</span>{% endif %}
+    {{ event.eventID }} · true: {{ event.truth }} · AI: {{ event.ai }} · {{ event.outcome }} · AI confidence {{ "%.2f" | format(event.confidence) }}
+  </h3>
+  <div class="images">
+    {% for image in failure.images %}
+    <figure>
+      <div class="frame">
+        <img src="{{ image.src }}" alt="{{ image.name }}">
+        {% for box in image.boxes %}
+        <div class="box" style="left: {{ box.bboxX | float * 100 }}%; top: {{ box.bboxY | float * 100 }}%; width: {{ box.bboxWidth | float * 100 }}%; height: {{ box.bboxHeight | float * 100 }}%;">
+          <span>{{ box.scientificName or box.observationType }}{% if box.classificationProbability %} {{ (box.classificationProbability | float * 100) | round | int }}%{% endif %}</span>
+        </div>
+        {% endfor %}
+      </div>
+      <figcaption>{{ image.name }} · {{ image.timestamp }}</figcaption>
+    </figure>
+    {% endfor %}
+  </div>
+</article>
+{% else %}
+<p><span class="icon good">✓</span> The AI got every event exactly right.</p>
+{% endfor %}
+<footer>Generated by CamTrapTools {{ version }}</footer>
+</main>
+</body>
+</html>

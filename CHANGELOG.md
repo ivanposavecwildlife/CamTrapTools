@@ -14,6 +14,18 @@ All notable changes to this project are documented here. The format follows
   event is correct, correct only above species level (verified against the true
   taxon's ancestry), unverified, or wrong. The command prints per-label precision and
   recall and every event that was not correct, and writes `evaluation.csv`.
+- Confidence thresholds: `evaluate` prints, for each label the AI used, the lowest event
+  confidence at which its answers reach a target precision (`--target-precision`,
+  default 0.95) and how many answers that keeps. Labels with fewer than ten answers are
+  flagged as unreliable, and `evaluation.csv` includes each event's confidence.
+- Failure report: `evaluate --report report.html --images DIR` writes a self-contained
+  HTML page with the outcomes, precision and recall, thresholds and every event the AI
+  did not get exactly right, with its images and bounding boxes.
+
+### Changed
+
+- Per-label precision counts answers that are correct above species level (such as
+  *Bovidae* for a gemsbok) as right; recall still requires the exact taxon.
 
 ## [0.3.0] - 2026-10-19
 
