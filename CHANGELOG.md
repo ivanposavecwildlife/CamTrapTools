@@ -23,6 +23,14 @@ All notable changes to this project are documented here. The format follows
   table add the chance of recording the species in a full occasion and of missing it
   over the whole survey at an occupied site, with a warning when detection is too rare
   to estimate occupancy or the interval is wider than 0.5.
+- Activity patterns in `ecology`: for each species with at least
+  `--min-activity-events` events (default 20), a daily activity curve from the start
+  times of its independent events, as a von Mises kernel density with the bandwidth of
+  Taylor (2008) estimated from trigonometric moments up to order 3, and its busiest
+  time of day. The overlap coefficient between every pair of species (Δ₁, or Δ₄ when
+  both have 75 or more events; Ridout & Linkie 2009) comes with a 95% percentile
+  bootstrap interval from 999 resamples. Writes `activity.csv`, `overlap.csv` and an
+  `activity.svg` chart of the six most recorded species.
 - `examples/kgalagadi/prepare.py` also writes a field sheet with each camera's season,
   from its first and last capture including blank ones.
 

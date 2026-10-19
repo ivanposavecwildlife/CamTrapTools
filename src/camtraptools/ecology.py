@@ -15,6 +15,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from camtraptools import activity
 from camtraptools.crops import location_of
 from camtraptools.detect import OBSERVATIONS_FILE
 from camtraptools.reviews import prefer_human
@@ -84,7 +85,7 @@ def animal_events(package_dir: Path, deployments: pd.DataFrame) -> pd.DataFrame:
     ].copy()
     events["site"] = events["deploymentID"].map(location_of(deployments))
     events["day"] = pd.to_datetime(events["eventStart"], format="ISO8601", errors="coerce").dt.date
-    return events.dropna(subset=["day"])[["eventID", "site", "day", "scientificName"]]
+    return events.dropna(subset=["day"])[["eventID", "site", "day", "eventStart", "scientificName"]]
 
 
 def detection_history(events: pd.DataFrame, effort: pd.DataFrame, occasion_days: int) -> pd.DataFrame:
@@ -292,14 +293,17 @@ def run(
     occasion_days: int = DEFAULT_OCCASION_DAYS,
     taxa: list[str] | None = None,
     all_taxa: bool = False,
-) -> tuple[pd.DataFrame, pd.Series]:
+    min_activity_events: int = activity.DEFAULT_MIN_EVENTS,
+) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
     """Write a detection history per taxon in ``out_dir/histories/``, the sampling
     effort in ``effort.csv`` and, in ``occupancy.csv``, naive occupancy and the
-    occupancy model's estimates for taxa recorded at three or more sites.
+    occupancy model's estimates for taxa recorded at three or more sites. Taxa with at
+    least ``min_activity_events`` events also get an activity curve, a peak hour and
+    their overlap with each other (see ``activity.run``).
 
     By default every species is included; ``all_taxa`` adds higher taxa such as
-    ``Bovidae``, and ``taxa`` chooses taxa by name. Returns the summary and the number
-    of events left out, by taxon.
+    ``Bovidae``, and ``taxa`` chooses taxa by name. Returns the summary, the number of
+    events left out by taxon, and the overlaps.
     """
     deployments = pd.read_csv(package_dir / "deployments.csv", dtype=str)
     effort = effort_matrix(deployments, occasion_days)
@@ -321,5 +325,8 @@ def run(
     summary = summarize(histories, events) if histories else pd.DataFrame()
     if histories:
         summary = summary.join(occupancy_models(histories, effort, occasion_days))
+    peaks, overlaps = activity.run(named[named["scientificName"].isin(chosen)], out_dir, min_activity_events)
+    if histories:
+        summary = summary.join(peaks[["peak"]].rename(columns={"peak": "activityPeak"}))
     summary.to_csv(out_dir / SUMMARY_FILE)
-    return summary, left_out.value_counts()
+    return summary, left_out.value_counts(), overlaps

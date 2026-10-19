@@ -638,3 +638,12 @@ def test_ecology_command_reports_occupancy_model(tmp_path):
     assert "Occupancy model (taxa recorded at 3 or more sites)" in result.output
     assert "95% interval" in result.output
     assert "missedAtOccupiedSite" in result.output
+    assert "No taxon has 20 or more events, the fewest for an activity curve." in result.output
+
+    result = runner.invoke(
+        app, ["ecology", str(package), "--out", str(tmp_path / "out"), "--min-activity-events", "2"]
+    )
+
+    assert "Daily activity (taxa with 2 or more events), busiest time of day:" in result.output
+    assert "Vulpes chama: " in result.output
+    assert (tmp_path / "out" / "activity.svg").exists()

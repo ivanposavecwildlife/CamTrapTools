@@ -108,7 +108,7 @@ def make_package(tmp_path):
 def test_run_writes_histories_effort_and_summary(tmp_path):
     package = make_package(tmp_path)
 
-    summary, left_out = ecology.run(package, tmp_path / "out")
+    summary, left_out, _ = ecology.run(package, tmp_path / "out")
 
     assert summary.index.tolist() == ["Vulpes chama"]
     assert summary.loc["Vulpes chama", "naiveOccupancy"] == 1.0
@@ -123,8 +123,8 @@ def test_run_writes_histories_effort_and_summary(tmp_path):
 def test_run_with_higher_taxa_and_chosen_taxa(tmp_path):
     package = make_package(tmp_path)
 
-    everything, _ = ecology.run(package, tmp_path / "all", all_taxa=True)
-    chosen, _ = ecology.run(package, tmp_path / "chosen", taxa=["Bovidae", "Panthera leo"])
+    everything, _, _ = ecology.run(package, tmp_path / "all", all_taxa=True)
+    chosen, _, _ = ecology.run(package, tmp_path / "chosen", taxa=["Bovidae", "Panthera leo"])
 
     assert sorted(everything.index) == ["Bovidae", "Vulpes chama"]
     assert chosen.index.tolist() == ["Bovidae"]
@@ -134,7 +134,7 @@ def test_run_uses_reviewed_decisions(tmp_path):
     package = make_package(tmp_path)
     reviews.save_review(package, "south-0002", "animal", "Raphicerus campestris", 1, "Tester")
 
-    summary, _ = ecology.run(package, tmp_path / "out")
+    summary, _, _ = ecology.run(package, tmp_path / "out")
 
     assert summary.loc["Raphicerus campestris", "sitesDetected"] == 1
 

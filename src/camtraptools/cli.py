@@ -9,6 +9,7 @@ import typer
 
 from camtraptools import (
     __version__,
+    activity,
     adapt,
     check,
     crops,
@@ -622,13 +623,16 @@ def ecology_cmd(
         list[str] | None, typer.Option(help="Only this taxon (scientific name); repeat for several.")
     ] = None,
     all_taxa: Annotated[bool, typer.Option(help="Include higher taxa such as Bovidae, not only species.")] = False,
+    min_activity_events: Annotated[
+        int, typer.Option(min=2, help="Fewest events for a taxon's activity curve and overlaps.")
+    ] = activity.DEFAULT_MIN_EVENTS,
 ) -> None:
-    """Build detection histories per species and estimate occupancy, naive and modelled."""
+    """Estimate occupancy (naive and modelled) and daily activity for each species."""
     if not (package / detect.OBSERVATIONS_FILE).exists():
         typer.echo(f"Error: no observations.csv in {package}; run `camtraptools detect` first.", err=True)
         raise typer.Exit(1)
     try:
-        summary, left_out = ecology.run(package, out, occasion_days, taxon, all_taxa)
+        summary, left_out, overlaps = ecology.run(package, out, occasion_days, taxon, all_taxa, min_activity_events)
     except ValueError as error:
         typer.echo(f"Error: {error}", err=True)
         raise typer.Exit(1) from error
@@ -664,8 +668,29 @@ def ecology_cmd(
             "detectionPerOccasion: chance of recording the species in one full occasion where it is present; "
             "missedAtOccupiedSite: chance of never recording it over the survey."
         )
+    report_activity(summary, overlaps, min_activity_events)
     if not left_out.empty and not taxon:
         reason = "not identified to species" if not all_taxa else "not identified"
         typer.echo(f"\nLeft out {crops.plural(int(left_out.sum()), 'event')} {reason}: "
                    + ", ".join(f"{name} ({count})" for name, count in left_out.head(8).items()))
     typer.echo(f"Wrote {out / ecology.SUMMARY_FILE}, {out / ecology.EFFORT_FILE} and {out / ecology.HISTORIES_FOLDER}/")
+    if (out / activity.PLOT_FILE).exists() and "activityPeak" in summary.columns and summary["activityPeak"].notna().any():
+        typer.echo(f"Wrote {out / activity.ACTIVITY_FILE}, {out / activity.OVERLAP_FILE} and {out / activity.PLOT_FILE}")
+
+
+def report_activity(summary: pd.DataFrame, overlaps: pd.DataFrame, min_events: int) -> None:
+    """Print each species' activity peak and the overlap between species' activity."""
+    if "activityPeak" not in summary.columns or summary["activityPeak"].isna().all():
+        typer.echo(f"\nNo taxon has {min_events} or more events, the fewest for an activity curve.")
+        return
+    peaks = summary.dropna(subset=["activityPeak"])
+    typer.echo(f"\nDaily activity (taxa with {min_events} or more events), busiest time of day:")
+    for name, row in peaks.iterrows():
+        typer.echo(f"  {name}: {row['activityPeak']} ({int(row['events'])} events)")
+    if not overlaps.empty:
+        typer.echo("\nActivity overlap (0 = never active at the same time, 1 = identical), with 95% interval:")
+        for row in overlaps.itertuples():
+            typer.echo(
+                f"  {row.first} & {row.second}: {row.overlap:.2f} ({row.overlapLower:.2f}–{row.overlapUpper:.2f}, "
+                f"{row.estimator})"
+            )
