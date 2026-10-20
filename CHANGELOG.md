@@ -6,7 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `labels` reads COCO Camera Traps JSON files, the format of LILA BC datasets and
+  MegaDetector tools (`--format coco`, detected automatically for `.json` files), with
+  category names such as `collared_peccary` turned into words.
+
 ### Changed
+
+- `labels` matches names more flexibly: punctuation is ignored (`salvins curassow`
+  matches Salvin's curassow), `unknown X` is tried as X, `X family` and the family
+  `X` + `ae` (`unknown cervid` becomes Cervidae), a label matches the one taxonomy name
+  it ends (`cattle`: domestic cattle) or that starts it (`red brocket deer`: red
+  brocket), and a species is preferred when a name is also a genus (`puma`: *Puma
+  concolor*). A plain `unknown` label counts as not labelled.
 
 - CI no longer runs on macOS: GitHub's Apple Silicon runners were often unavailable and
   the job was cancelled without running. The full test suite runs on macOS before each

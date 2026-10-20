@@ -1,3 +1,5 @@
+import json
+
 import pandas as pd
 import pytest
 
@@ -35,6 +37,7 @@ def test_detect_format(tmp_path):
     assert labels.detect_format(tmp_path / "dp") == "camtrap-dp"
     assert labels.detect_format(tmp_path / "images.csv") == "wildlife-insights"
     assert labels.detect_format(tmp_path / "timelapse.csv") == "csv"
+    assert labels.detect_format(tmp_path / "metadata.json") == "coco"
 
 
 def test_match_images_by_path_then_file_name(tmp_path):
@@ -185,3 +188,77 @@ def test_speciesnet_taxonomy_reads_a_downloaded_model(tmp_path, monkeypatch):
     ]
     monkeypatch.setenv("KAGGLEHUB_CACHE", str(tmp_path / "empty"))
     assert labels.speciesnet_taxonomy() is None
+
+
+def test_run_with_a_coco_camera_traps_file(tmp_path, monkeypatch):
+    unknown_bird = pd.DataFrame([["Aves", "bird", "", "", "", "Aves"]], columns=TAXONOMY.columns)
+    monkeypatch.setattr(labels, "speciesnet_taxonomy", lambda: pd.concat([TAXONOMY, unknown_bird], ignore_index=True))
+    package = make_package(tmp_path)
+    source = tmp_path / "metadata.json"
+    source.write_text(
+        json.dumps(
+            {
+                "images": [
+                    {"id": "a", "file_name": "cam_A/DCIM/IMG_0001.JPG", "location": "cam_A"},
+                    {"id": "b", "file_name": "cam_A/DCIM/IMG_0002.JPG", "location": "cam_A"},
+                    {"id": "c", "file_name": "cam_B/IMG_0001.JPG", "location": "cam_B"},
+                ],
+                "annotations": [
+                    {"image_id": "a", "category_id": 2},
+                    {"image_id": "b", "category_id": 0},
+                    {"image_id": "c", "category_id": 3},
+                    {"image_id": "c", "category_id": 4},
+                ],
+                "categories": [
+                    {"id": 0, "name": "empty"},
+                    {"id": 2, "name": "cape_fox"},
+                    {"id": 3, "name": "unknown_bird"},
+                    {"id": 4, "name": "unknown"},
+                ],
+            }
+        )
+    )
+
+    summary = labels.run(package, source, tmp_path / "truth.csv")
+
+    truth = pd.read_csv(tmp_path / "truth.csv").fillna("")
+    assert summary["format"] == "coco"
+    assert truth[["filePath", "scientificName"]].values.tolist() == [
+        ["cam_A/DCIM/IMG_0001.JPG", "Vulpes chama"],
+        ["cam_A/DCIM/IMG_0002.JPG", ""],
+        ["cam_B/IMG_0001.JPG", "Aves"],
+    ]
+    assert summary["unknown"] == []
+
+
+@pytest.mark.parametrize(
+    ("label", "expected"),
+    [
+        ("salvins_curassow", "Mitu salvini"),
+        ("Salvin's Curassow", "Mitu salvini"),
+        ("unknown armadillo", "Dasypodidae"),
+        ("unknown cervid", "Cervidae"),
+        ("cattle", "Bos taurus"),
+        ("red brocket deer", "Mazama americana"),
+        ("puma", "Puma concolor"),
+        ("Puma", "Puma concolor"),
+        ("brocket", None),
+    ],
+)
+def test_taxonomy_find(label, expected):
+    rows = [
+        ["Mitu salvini", "salvin's curassow"],
+        ["Dasypodidae", "armadillo family"],
+        ["Cervidae", "cervidae family"],
+        ["Bos taurus", "domestic cattle"],
+        ["Bubulcus ibis", "cattle egret"],
+        ["Mazama americana", "red brocket"],
+        ["Mazama gouazoubira", "gray brocket"],
+        ["Puma", "puma species"],
+        ["Puma concolor", "puma"],
+    ]
+    table = pd.DataFrame(rows, columns=["scientificName", "commonName"]).assign(genus="", family="", order="", **{"class": ""})
+
+    found = labels.Taxonomy(table).find(label)
+
+    assert (found["scientificName"] if found is not None else None) == expected

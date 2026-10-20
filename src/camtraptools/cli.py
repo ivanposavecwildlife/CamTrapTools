@@ -878,14 +878,14 @@ def labels_cmd(
         Path,
         typer.Argument(
             exists=True,
-            help="Existing labels: a Camtrap DP package folder, a Wildlife Insights images.csv, or a CSV (e.g. Timelapse).",
+            help="Existing labels: a Camtrap DP package folder, a COCO Camera Traps .json, a Wildlife Insights images.csv, or a CSV (e.g. Timelapse).",
         ),
     ],
     out: Annotated[Path, typer.Option(help="Truth file to write, for evaluate, crops and compare.")] = Path(
         "labels.csv"
     ),
     source_format: Annotated[
-        str, typer.Option("--format", help="auto, camtrap-dp, wildlife-insights or csv.")
+        str, typer.Option("--format", help="auto, camtrap-dp, coco, wildlife-insights or csv.")
     ] = "auto",
     species_column: Annotated[
         str | None, typer.Option(help="CSV column with the species or label, e.g. Species.")
@@ -902,7 +902,7 @@ def labels_cmd(
         typer.Option(exists=True, dir_okay=False, help="CSV mapping your labels to scientific names (label, scientificName)."),
     ] = None,
 ) -> None:
-    """Import existing image labels (Camtrap DP, Wildlife Insights, Timelapse or any CSV) as a truth file."""
+    """Import existing image labels (Camtrap DP, COCO Camera Traps, Wildlife Insights, Timelapse or any CSV) as a truth file."""
     if source_format not in labels.FORMATS:
         typer.echo(f"Error: --format must be one of {', '.join(labels.FORMATS)}.", err=True)
         raise typer.Exit(1)

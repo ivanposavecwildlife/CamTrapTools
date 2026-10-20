@@ -512,8 +512,9 @@ also saved as `evaluation.csv` in the package.
 
 ### Already have labels?
 
-If the images were labelled before, in Timelapse, Wildlife Insights or another Camtrap
-DP tool such as Agouti or Trapper, `labels` turns them into this truth file:
+If the images were labelled before, in Timelapse, Wildlife Insights, another Camtrap DP
+tool such as Agouti or Trapper, or a COCO Camera Traps file, `labels` turns them into
+this truth file:
 
 ```bash
 camtraptools labels my_survey old_labels.csv --species-column Species --out labels.csv
@@ -535,6 +536,7 @@ Images per label:
 | Source | How to give it |
 |---|---|
 | Camtrap DP package | the package folder; human classifications are used if there are any |
+| COCO Camera Traps | the `.json` file, as published with LILA BC datasets and made by MegaDetector tools |
 | Wildlife Insights | the `images.csv` from the project's export |
 | Timelapse | the exported CSV with `--species-column` (the name of your species field); `RelativePath` and `File` are read automatically |
 | Any other spreadsheet | `--species-column` and either `--path-column`, or `--file-column` with `--folder-column` |

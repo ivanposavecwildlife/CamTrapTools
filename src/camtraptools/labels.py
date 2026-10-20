@@ -1,6 +1,7 @@
 """Import existing image labels as a truth file for ``evaluate``, ``crops`` and ``compare``.
 
 Labels can come from another Camtrap DP package (for example from Agouti or Trapper),
+a COCO Camera Traps JSON file (the format of LILA BC datasets and MegaDetector tools),
 a Wildlife Insights ``images.csv`` export, a Timelapse CSV export or any spreadsheet
 with an image path and a species column. Each labelled image is matched to an image
 in the package, and common names are turned into scientific names where possible.
@@ -8,7 +9,9 @@ The result is a CSV with ``filePath``, ``scientificName`` (empty for blank image
 where known, ``genus``, ``family``, ``order`` and ``class``.
 """
 
+import json
 import os
+import re
 from pathlib import Path, PurePosixPath
 
 import pandas as pd
@@ -16,7 +19,7 @@ import pandas as pd
 from camtraptools.detect import parse_taxon
 from camtraptools.importer import match_path
 
-FORMATS = ["auto", "camtrap-dp", "wildlife-insights", "csv"]
+FORMATS = ["auto", "camtrap-dp", "coco", "wildlife-insights", "csv"]
 RANKS = ["genus", "family", "order", "class"]
 BLANK_VALUES = {"blank", "empty", "none", "nothing", "no animal", "false trigger", "misfire"}
 HUMAN_NAMES = {"homo sapiens", "human", "person", "people"}
@@ -30,6 +33,8 @@ def detect_format(source: Path) -> str:
     its ``datapackage.json``), a Wildlife Insights image export, or another CSV."""
     if source.is_dir() or source.name == "datapackage.json":
         return "camtrap-dp"
+    if source.suffix.lower() == ".json":
+        return "coco"
     columns = set(pd.read_csv(source, nrows=0).columns)
     if {"filename", "deployment_id", "is_blank", "genus", "species"} <= columns:
         return "wildlife-insights"
@@ -82,6 +87,31 @@ def observation_label(observation_type, scientific_name) -> str | None:
     if observation_type in ("blank", "human", "vehicle"):
         return observation_type
     return None
+
+
+def read_coco(source: Path) -> pd.DataFrame:
+    """Return one label per annotation of a COCO Camera Traps JSON file: its image's
+    ``file_name`` and the annotation's category name, with underscores as spaces
+    (``collared_peccary`` becomes ``collared peccary``). Images without annotations
+    are left out, as they are not labelled."""
+    data = json.loads(source.read_text(encoding="utf-8"))
+    names = {category["id"]: category["name"].replace("_", " ").strip() for category in data["categories"]}
+    files = {image["id"]: image["file_name"] for image in data["images"]}
+    locations = {image["id"]: image.get("location") for image in data["images"]}
+    rows = []
+    for annotation in data["annotations"]:
+        path = files.get(annotation["image_id"])
+        if path is None:
+            continue
+        rows.append(
+            {
+                "path": path,
+                "fileName": PurePosixPath(path).name,
+                "deployment": locations.get(annotation["image_id"]),
+                "label": names.get(annotation["category_id"]),
+            }
+        )
+    return pd.DataFrame(rows, columns=LABEL_COLUMNS)
 
 
 def read_wildlife_insights(source: Path) -> pd.DataFrame:
@@ -171,6 +201,49 @@ def speciesnet_taxonomy() -> pd.DataFrame | None:
     return pd.DataFrame(rows, columns=["scientificName", "commonName", *RANKS])
 
 
+def normalise(name: str) -> str:
+    """Return a name in lower case without punctuation, so ``Salvin's curassow`` and
+    ``salvins_curassow`` compare equal."""
+    return " ".join(re.sub(r"[^a-z0-9 ]", "", name.lower().replace("_", " ").replace("-", " ")).split())
+
+
+class Taxonomy:
+    """Finds taxa in SpeciesNet's taxonomy by scientific or common name."""
+
+    def __init__(self, table: pd.DataFrame | None):
+        self.by_scientific, self.by_common = {}, {}
+        if table is None:
+            return
+        for _, row in table.iterrows():
+            self.by_scientific.setdefault(normalise(row["scientificName"]), row)
+            self.by_common.setdefault(normalise(row["commonName"]), row)
+
+    def find(self, name: str) -> pd.Series | None:
+        """Return the taxon for a label: by scientific or common name; for
+        ``unknown X``, as X, ``X family`` or the family ``X`` + ``ae`` (``unknown cervid``
+        becomes Cervidae), preferring a species when a name is both a genus and a
+        species' common name (``puma``: Puma concolor); else the one common name that ends with the label
+        (``cattle``: domestic cattle) or, of two or more words, starts it (``red brocket
+        deer``: red brocket). Ambiguous or unknown labels return ``None``."""
+        key = normalise(name)
+        candidates = [key]
+        if key.startswith("unknown "):
+            rest = key.removeprefix("unknown ")
+            candidates += [rest, f"{rest} family", f"{rest}ae", f"{rest}ae family"]
+        for candidate in candidates:
+            found = [index[candidate] for index in (self.by_scientific, self.by_common) if candidate in index]
+            if found:
+                species = [row for row in found if " " in row["scientificName"]]
+                return (species or found)[0]
+        endings = [row for common, row in self.by_common.items() if common.endswith(f" {key}")]
+        if len(endings) == 1:
+            return endings[0]
+        beginnings = [
+            row for common, row in self.by_common.items() if " " in common and key.startswith(f"{common} ")
+        ]
+        return beginnings[0] if len(beginnings) == 1 else None
+
+
 def resolve_names(
     labels: pd.Series, names_file: Path | None = None, taxonomy: pd.DataFrame | None = None
 ) -> tuple[pd.DataFrame, list[str]]:
@@ -179,36 +252,28 @@ def resolve_names(
 
     Blank and human labels are standardised. A ``names_file`` (columns ``label`` and
     ``scientificName``) maps labels first; then SpeciesNet's taxonomy recognises
-    scientific names in any capitalisation and common names such as ``red fox``.
-    Labels it does not know are kept as they are and reported.
+    scientific and common names (see ``Taxonomy.find``). Labels it does not know are
+    kept as they are and reported.
     """
     mapping = {}
     if names_file is not None:
         names = pd.read_csv(names_file, dtype=str)
-        mapping = {str(row.label).strip().lower(): row.scientificName for row in names.itertuples()}
-    by_scientific = by_common = {}
-    if taxonomy is not None:
-        by_scientific = {name.lower(): row for name, row in taxonomy.set_index("scientificName", drop=False).iterrows()}
-        by_common = {}
-        for row in taxonomy.itertuples():
-            by_common.setdefault(row.commonName.lower(), taxonomy.loc[row.Index])
+        mapping = {normalise(str(row.label)): row.scientificName for row in names.itertuples()}
+    known = Taxonomy(taxonomy)
     rows, unknown = [], []
     for label in sorted(set(labels.dropna())):
-        key = label.strip().lower()
+        key = normalise(label)
         target = mapping.get(key, label.strip())
-        target_key = str(target).strip().lower()
+        target_key = normalise(str(target)) if isinstance(target, str) else ""
         ranks = dict.fromkeys(RANKS)
+        match = known.find(target) if isinstance(target, str) else None
         if target_key in BLANK_VALUES or (isinstance(target, float) and pd.isna(target)):
             name = ""
         elif target_key in HUMAN_NAMES:
             name = "human"
         elif target_key == "vehicle":
             name = "vehicle"
-        elif target_key in by_scientific:
-            match = by_scientific[target_key]
-            name, ranks = match["scientificName"], {rank: match[rank] or None for rank in RANKS}
-        elif target_key in by_common:
-            match = by_common[target_key]
+        elif match is not None:
             name, ranks = match["scientificName"], {rank: match[rank] or None for rank in RANKS}
         else:
             name = str(target).strip()
@@ -263,6 +328,8 @@ def run(
     source_format = detect_format(source) if source_format == "auto" else source_format
     if source_format == "camtrap-dp":
         labels = read_camtrap_dp(source)
+    elif source_format == "coco":
+        labels = read_coco(source)
     elif source_format == "wildlife-insights":
         labels = read_wildlife_insights(source)
     else:
@@ -271,6 +338,7 @@ def run(
         labels = read_csv(source, species_column, path_column, file_column, folder_column)
     rows_read = len(labels)
     labels = labels.dropna(subset=["label"])
+    labels = labels[~labels["label"].str.strip().str.lower().isin(UNKNOWN_NAMES)]
 
     media = pd.read_csv(package_dir / "media.csv", dtype=str)
     labels["filePath"], missing, ambiguous = match_images(labels, media)
