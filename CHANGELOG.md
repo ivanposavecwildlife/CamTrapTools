@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-20
+
+Ecology: detection histories, occupancy corrected for imperfect detection, daily
+activity and overlap between species, and a comparison of how AI mistakes, review and
+adaptation change these results.
+
 ### Added
 
 - `ecology` command: writes a detection history per species (sites by sampling
@@ -201,6 +207,7 @@ First release: ingest, quality checks and an HTML health report.
   summary table and all issues, in light and dark mode.
 - Continuous integration on Python 3.11–3.14 (Linux) and on Windows and macOS.
 
+[0.5.0]: https://github.com/ivanposavecwildlife/CamTrapTools/releases/tag/v0.5.0
 [0.4.0]: https://github.com/ivanposavecwildlife/CamTrapTools/releases/tag/v0.4.0
 [0.3.0]: https://github.com/ivanposavecwildlife/CamTrapTools/releases/tag/v0.3.0
 [0.2.0]: https://github.com/ivanposavecwildlife/CamTrapTools/releases/tag/v0.2.0
