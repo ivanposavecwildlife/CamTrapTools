@@ -942,3 +942,6 @@ Run `camtraptools COMMAND --help` for every option and its default.
 The [Kgalagadi case study](case-study-kgalagadi.md) runs the full workflow on 2,336
 images from 20 cameras in the Kgalagadi Transfrontier Park, with a script that
 downloads the data, and reports how SpeciesNet, adaptation and review compare.
+
+The [Orinoquía validation](validation-orinoquia.md) runs it on 6,416 images from 48
+cameras in Colombia, with expert labels in COCO Camera Traps format.

@@ -245,6 +245,17 @@ layer cut missed records to 32, and to 25 with 10% of events reviewed.
 
 ![Test-camera detections that the adapted layer identified correctly](https://raw.githubusercontent.com/ivanposavecwildlife/CamTrapTools/main/docs/adapted-examples.jpg)
 
+### Second dataset: Orinoquía, Colombia
+
+A second test, on 6,416 images from 48 cameras in Neotropical savanna and forest in
+Colombia with expert labels, ran the whole workflow on new cameras, a much richer
+fauna and a new label format. It found and fixed five problems, including COCO Camera
+Traps labels and names that did not match SpeciesNet's. SpeciesNet got 51% of events
+exactly right, 14% right at a higher taxon and 21% more specific than the experts, and
+14% wrong, mostly close relatives such as curassows and peccaries. Occupancy of the
+common mammals differed from the experts' by 0.02 to 0.09. Details are in the
+[validation report](https://github.com/ivanposavecwildlife/CamTrapTools/blob/main/docs/validation-orinoquia.md).
+
 ## Roadmap
 
 ```

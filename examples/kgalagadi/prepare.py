@@ -23,6 +23,8 @@ Data License Agreement (permissive). Downloads resume: existing images are kept.
 
 import io
 import sys
+import threading
+import time
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -81,12 +83,31 @@ def image_labels() -> pd.DataFrame:
     return images.merge(captures, on="capture_id")
 
 
+sessions = threading.local()
+
+
+def get(url: str) -> requests.Response | None:
+    """Return the response for ``url``, reusing one connection per thread (opening a
+    new one per image runs out of network ports on large downloads) and retrying
+    network errors a few times; ``None`` if it keeps failing."""
+    if not hasattr(sessions, "session"):
+        sessions.session = requests.Session()
+    for attempt in range(4):
+        try:
+            return sessions.session.get(url, timeout=60)
+        except requests.RequestException:
+            time.sleep(2**attempt)
+    return None
+
+
 def download(path: str, sd_cards: Path) -> str:
     """Download one image unless it is already there; return what happened."""
     target = sd_cards / path.removeprefix("KGA_S1/")
     if target.exists():
         return "already downloaded"
-    response = requests.get(IMAGES + path, timeout=60)
+    response = get(IMAGES + path)
+    if response is None:
+        return "failed (network error); run the script again"
     if response.status_code != 200:
         return f"not available (HTTP {response.status_code})"
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -102,7 +123,9 @@ def main(out: Path) -> None:
     paths = sorted(set(animals["image_path_rel"]))
     print(f"Downloading {len(paths)} images with animals to {out / 'sd_cards'}")
     with ThreadPoolExecutor(max_workers=16) as pool:
-        results = pd.Series(list(pool.map(lambda path: download(path, out / "sd_cards"), paths)))
+        results = pd.Series(list(pool.map(lambda path: download(path, out / "sd_cards"), paths)), index=paths)
+    for path in results.index[results.str.startswith("failed")]:
+        results[path] = download(path, out / "sd_cards")
     print(results.value_counts().to_string())
 
     truth = animals[animals["question__species"].isin(TAXA)].copy()

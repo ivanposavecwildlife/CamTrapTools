@@ -12,6 +12,9 @@ All notable changes to this project are documented here. The format follows
   reference's label (a nine-banded armadillo where the reference says only
   Dasypodidae). It was counted as wrong; it now counts as right for precision, and the
   survey summary reports it.
+- Second validation (`docs/validation-orinoquia.md`) on Orinoquía Camera Traps
+  (Colombia), with `examples/orinoquia/prepare.py` to download the subset and
+  `names.csv` for labels that need a mapping.
 - `labels` reads COCO Camera Traps JSON files, the format of LILA BC datasets and
   MegaDetector tools (`--format coco`, detected automatically for `.json` files), with
   category names such as `collared_peccary` turned into words.
@@ -35,6 +38,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- The example download scripts reuse one connection per thread, retry network errors
+  and fetch failed images one at a time at the end; opening a new connection per image
+  ran out of network ports on large downloads.
 - Activity and richness calculations work with NumPy 1.26, which Intel Macs install;
   they failed there because `numpy.trapezoid` needs NumPy 2.
 
