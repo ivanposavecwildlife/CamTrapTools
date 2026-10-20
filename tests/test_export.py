@@ -161,7 +161,7 @@ def test_run_writes_all_four_files(tmp_path):
 
     left_out = export.run(package, tmp_path / "out", "Test", ["Ivan Posavec"], "Africa/Johannesburg")
 
-    assert left_out == {"media_without_timestamp": 0, "extra_columns": []}
+    assert left_out == {"media_without_timestamp": 0, "extra_columns": [], "human_media": 0, "humans_excluded": False}
     assert sorted(path.name for path in (tmp_path / "out").iterdir()) == [
         "datapackage.json",
         "deployments.csv",
@@ -206,3 +206,64 @@ def test_run_exports_the_human_decision_for_reviewed_events(tmp_path):
     event_rows = exported[exported["observationLevel"] == "event"]
     assert list(event_rows["observationID"]) == ["camera_A-0001-human"]
     assert event_rows.iloc[0]["classificationMethod"] == "human"
+
+
+def test_human_media_includes_images_of_human_events():
+    observations = pd.DataFrame(
+        {
+            "mediaID": ["a.JPG", "b.JPG", "c.JPG", None, None],
+            "eventID": ["e1", "e2", "e2", "e1", "e2"],
+            "observationLevel": ["media", "media", "media", "event", "event"],
+            "observationType": ["human", "blank", "animal", "human", "human"],
+        }
+    )
+
+    assert export.human_media(observations) == {"a.JPG", "b.JPG", "c.JPG"}
+
+
+def test_generalise_coordinates_rounds_and_widens_uncertainty():
+    deployments = make_deployments(coordinateUncertainty=[None, "5000"]).assign(latitude=["52.70312", "52.8"])
+
+    generalised = export.generalise_coordinates(deployments, decimals=2)
+
+    assert generalised["latitude"].tolist() == ["52.70", "52.80"]
+    assert generalised["longitude"].tolist() == ["23.85", "23.95"]
+    assert generalised["coordinateUncertainty"].tolist() == ["651", "5000"]
+
+
+def package_with_a_person(tmp_path):
+    package = make_package(tmp_path / "work")
+    observations = pd.read_csv(package / "observations.csv")
+    observations.loc[1, ["observationType", "count"]] = ["human", 1]
+    observations.to_csv(package / "observations.csv", index=False)
+    return package
+
+
+def test_run_can_leave_out_people_and_round_coordinates(tmp_path):
+    package = package_with_a_person(tmp_path)
+
+    left_out = export.run(
+        package, tmp_path / "out", "Test", ["Ivan"], "Africa/Johannesburg", exclude_humans=True, coordinate_decimals=1
+    )
+
+    assert (left_out["human_media"], left_out["humans_excluded"]) == (1, True)
+    media = pd.read_csv(tmp_path / "out/media.csv")
+    observations = pd.read_csv(tmp_path / "out/observations.csv")
+    assert media["mediaID"].tolist() == ["camera_A/m1.JPG"]
+    assert "human" not in set(observations["observationType"])
+    deployments = pd.read_csv(tmp_path / "out/deployments.csv", dtype=str)
+    assert deployments["latitude"].tolist() == ["52.7", "52.8"]
+    descriptor = json.loads((tmp_path / "out/datapackage.json").read_text(encoding="utf-8"))
+    assert descriptor["coordinatePrecision"] == 0.1
+
+
+def test_package_with_privacy_options_passes_frictionless_validation(tmp_path):
+    frictionless = pytest.importorskip("frictionless")
+    if not can_reach_camtrap_dp():
+        pytest.skip("the Camtrap DP schemas could not be downloaded")
+    package = package_with_a_person(tmp_path)
+    export.run(package, tmp_path / "out", "Test", ["Ivan"], "Africa/Johannesburg", exclude_humans=True, coordinate_decimals=2)
+
+    report = frictionless.validate(tmp_path / "out/datapackage.json")
+
+    assert report.valid, report.flatten(["type", "note"])

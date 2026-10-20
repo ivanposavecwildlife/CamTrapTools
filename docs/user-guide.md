@@ -723,6 +723,22 @@ Wrote a Camtrap DP 1.0.2 data package to publish
   `clusteredRandom`, `experimental`, `targeted` or `opportunistic`, the default),
   `--license` and `--media-license` (default `CC-BY-4.0`).
 
+**Privacy.** Before publishing, decide what should not be public:
+
+- `--exclude-humans` leaves out images of people (any image with a person, and every
+  image of an event decided as human) and their observations. Without it, `export`
+  warns when the data contains people. Image files are always marked as not public
+  (`filePublic` is false), but the records themselves show when and where people were.
+- `--coordinate-decimals 2` rounds every camera's coordinates to two decimals (about
+  1 km), widens `coordinateUncertainty` to cover the rounding, and records the precision
+  in the package. Use it when sites of sensitive species, such as dens, nests or rare
+  plants nearby, must not be found from the data. One decimal is about 11 km.
+
+```bash
+camtraptools export my_survey --out publish --title "…" --contributor "…" \
+    --timezone Europe/Zagreb --exclude-humans --coordinate-decimals 2
+```
+
 The `publish/` folder holds `datapackage.json` and the three tables, with every
 standard column, time zones on all times, and coverage in space, time and taxa. Your
 review decisions are used wherever you made one. Every deployment needs coordinates;
@@ -812,7 +828,7 @@ original answer next to yours.
 | `adapt CROPS` | Train the adapted layer | `--out`, `--epochs`, `--learning-rate`, `--balanced`, `--seed`, `--device` |
 | `ecology PACKAGE` | Occupancy and activity | `--out`, `--occasion-days`, `--taxon`, `--all-taxa`, `--min-activity-events` |
 | `compare PACKAGE` | Compare labellings | `--out`, `--truth`, `--other`, `--occasion-days`, `--min-activity-events` |
-| `export PACKAGE` | Camtrap DP for GBIF | `--out`, `--title`, `--contributor`, `--timezone`, `--sampling-design`, `--license`, `--media-license` |
+| `export PACKAGE` | Camtrap DP for GBIF | `--out`, `--title`, `--contributor`, `--timezone`, `--sampling-design`, `--license`, `--media-license`, `--exclude-humans`, `--coordinate-decimals` |
 
 Run `camtraptools COMMAND --help` for every option and its default.
 

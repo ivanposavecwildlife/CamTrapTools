@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Privacy in `export`: `--exclude-humans` leaves out images of people (with a human
+  observation, or in an event decided as human) and their observations, and `export`
+  warns when people are present without it; `--coordinate-decimals` rounds every
+  deployment's coordinates, widens `coordinateUncertainty` to the rounding grid's
+  half-diagonal and records `coordinatePrecision` in `datapackage.json`.
+
+### Fixed
+
+- `export` writes observation counts as whole numbers, as Camtrap DP requires, even
+  when `observations.csv` has them as decimals (for example after editing in a
+  spreadsheet).
+
 ### Changed
 
 - Installation from PyPI (`uv tool install "camtraptools[detect]"` or `pip install

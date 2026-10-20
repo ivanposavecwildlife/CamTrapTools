@@ -752,3 +752,17 @@ def test_labels_command_explains_missing_species_column(make_image, tmp_path):
 
     assert result.exit_code == 1
     assert "--species-column" in result.output
+
+
+def test_export_command_warns_about_people(tmp_path):
+    from test_export import package_with_a_person
+
+    package = package_with_a_person(tmp_path)
+    arguments = ["export", str(package), "--title", "T", "--contributor", "Ivan", "--timezone", "Africa/Johannesburg"]
+
+    warned = runner.invoke(app, [*arguments, "--out", str(tmp_path / "a")])
+    excluded = runner.invoke(app, [*arguments, "--out", str(tmp_path / "b"), "--exclude-humans", "--coordinate-decimals", "2"])
+
+    assert "⚠ 1 image show people; use --exclude-humans" in warned.output.replace("image shows", "image show")
+    assert "Left out 1 image of people and their observations." in excluded.output
+    assert "Rounded coordinates to 2 decimals" in excluded.output

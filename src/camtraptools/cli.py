@@ -350,6 +350,13 @@ def export_cmd(
     ] = "opportunistic",
     license: Annotated[str, typer.Option(help="License of the data, e.g. CC0-1.0 or CC-BY-4.0.")] = "CC-BY-4.0",
     media_license: Annotated[str, typer.Option(help="License of the images.")] = "CC-BY-4.0",
+    exclude_humans: Annotated[
+        bool, typer.Option(help="Leave out images of people and their observations.")
+    ] = False,
+    coordinate_decimals: Annotated[
+        int | None,
+        typer.Option(min=0, max=6, help="Round coordinates to this many decimals to protect sites, e.g. 2 (about 1 km)."),
+    ] = None,
 ) -> None:
     """Write a complete Camtrap DP data package, ready to validate and publish."""
     if not (package / detect.OBSERVATIONS_FILE).exists():
@@ -364,12 +371,24 @@ def export_cmd(
         typer.echo(f"Error: unknown time zone {timezone!r}; use a name such as Africa/Johannesburg.", err=True)
         raise typer.Exit(1)
     try:
-        left_out = export.run(package, out, title, contributor, timezone, sampling_design, license, media_license)
+        left_out = export.run(
+            package, out, title, contributor, timezone, sampling_design, license, media_license,
+            exclude_humans, coordinate_decimals,
+        )
     except ValueError as error:
         typer.echo(f"Error: {error}", err=True)
         raise typer.Exit(1)
     if left_out["media_without_timestamp"]:
         typer.echo(f"Left out {left_out['media_without_timestamp']} images without a timestamp.")
+    if left_out["human_media"] and left_out["humans_excluded"]:
+        typer.echo(f"Left out {crops.plural(left_out['human_media'], 'image')} of people and their observations.")
+    elif left_out["human_media"]:
+        typer.echo(
+            f"⚠ {crops.plural(left_out['human_media'], 'image')} show people; "
+            "use --exclude-humans to leave them out before publishing."
+        )
+    if coordinate_decimals is not None:
+        typer.echo(f"Rounded coordinates to {coordinate_decimals} decimals and widened coordinateUncertainty.")
     if left_out["extra_columns"]:
         typer.echo(f"Left out deployment columns that are not part of Camtrap DP: {', '.join(left_out['extra_columns'])}")
     typer.echo(f"Wrote a Camtrap DP {export.CAMTRAP_DP_VERSION} data package to {out}")

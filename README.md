@@ -119,7 +119,9 @@ flash (`cam_noflash`) and clock errors.*
   added, occupancy error, and how much activity patterns and overlaps change.
 - **`export`**: writes a complete Camtrap DP 1.0.2 package (`datapackage.json` and three
   tables) with time zones, coverage, contributors and licenses, using the reviewer's
-  decision wherever an event was reviewed. Exported packages pass
+  decision wherever an event was reviewed. For privacy, `--exclude-humans` leaves out
+  images of people and `--coordinate-decimals` rounds the cameras' coordinates.
+  Exported packages pass
   [Frictionless](https://framework.frictionlessdata.io/) validation against the official
   Camtrap DP profile.
 
