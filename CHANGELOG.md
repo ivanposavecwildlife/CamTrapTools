@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- CI no longer runs on macOS: GitHub's Apple Silicon runners were often unavailable and
+  the job was cancelled without running. The full test suite runs on macOS before each
+  release.
+
 ## [0.7.0] - 2026-10-20
 
 Deliverables for partners: a one-page survey summary, species richness, occupancy
