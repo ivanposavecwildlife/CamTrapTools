@@ -1,9 +1,11 @@
 # Case study: adapting SpeciesNet to the Kgalagadi
 
-How well does a global camera-trap classifier work in one park, and how much does a
-small regional adaptation help? This case study runs CamTrapTools on all animal images
-from Snapshot Kgalagadi Season 1 and measures SpeciesNet before and after adapting it,
-on cameras that were never used for training.
+How well does a global camera-trap classifier work in one park, how much does a small
+regional adaptation help, and how much do the AI's mistakes change the ecological
+results? This case study runs CamTrapTools on all animal images from Snapshot
+Kgalagadi Season 1, measures SpeciesNet before and after adapting it on cameras that
+were never used for training, and compares occupancy and activity from the AI's labels
+with those from the volunteer labels.
 
 ## Summary
 
@@ -22,6 +24,12 @@ on cameras that were never used for training.
   wrong species. The adapted layer always names a species, so `detect` only uses it
   above a confidence threshold, chosen on validation cameras so that it is as precise as
   SpeciesNet.
+- **For ecology, a little review beats adaptation.** SpeciesNet alone missed 7 of 25
+  species and 41 of 113 species-at-site records, so brown hyena, Cape fox and African
+  wildcat looked absent from the park. Reviewing the least confident 20% of events
+  recovered all but one species and cut missed records to 18; reviewing half recovered
+  everything. A cross-fitted adapted layer, which never saw the cameras it labelled, cut
+  missed records to 32.
 - The whole run took about 45 minutes on a laptop (Apple M4): 22 minutes for
   SpeciesNet, 17 for crop features, seconds for training and 5 for `detect --adapted`.
 
@@ -156,6 +164,65 @@ On training camera A06, three blue wildebeest detections were changed to gemsbok
 are not part of the test results, but they show the layer's pull towards the most
 common species.
 
+## Ecological consequences
+
+`ecology` turns events into detection histories (20 camera sites, 7-day occasions),
+naive and modelled occupancy, and daily activity curves. `compare` runs it on several
+labellings of the same survey and measures how far each is from the volunteer labels.
+The study script `examples/kgalagadi/sensitivity.py` builds the labellings:
+
+- **SpeciesNet** alone, as run by `detect`.
+- **Adapted**, cross-fitted: the 20 cameras were split into four groups, and each group
+  was labelled by a layer trained on two of the other groups and tuned on the third,
+  so no camera was labelled by a layer that had seen it. With fewer training cameras
+  per layer, the chosen thresholds were higher (0.77 to 0.999) than in the main study.
+- **Reviewed**: the least confident share of the 466 events, in the order the review
+  app shows them, relabelled with the volunteer labels. This assumes a reviewer who is
+  always right.
+
+| Labels | Species missed | Species wrongly added | Site records missed (of 113) | Site records added | Naive occupancy error | Activity difference | Overlap error |
+|---|---|---|---|---|---|---|---|
+| SpeciesNet | 7 | 2 | 41 | 3 | 0.080 | 0.080 | 0.042 |
+| Adapted (cross-fitted) | 4 | 2 | 32 | 6 | 0.064 | 0.075 | 0.053 |
+| SpeciesNet, 10% reviewed (47 events) | 2 | 2 | 33 | 3 | 0.064 | 0.072 | 0.033 |
+| SpeciesNet, 20% reviewed (93 events) | 1 | 2 | 18 | 3 | 0.034 | 0.063 | 0.023 |
+| SpeciesNet, 30% reviewed (140 events) | 1 | 2 | 10 | 3 | 0.022 | 0.047 | 0.025 |
+| SpeciesNet, 50% reviewed (233 events) | 0 | 0 | 2 | 0 | 0.004 | 0.016 | 0.015 |
+| Adapted, 10% reviewed | 2 | 2 | 25 | 5 | 0.052 | 0.061 | 0.043 |
+| Adapted, 20% reviewed | 2 | 2 | 17 | 5 | 0.036 | 0.049 | 0.038 |
+
+*Site records are species recorded at a camera site. Errors are mean absolute
+differences over the volunteer labels' species (naive occupancy) or species pairs
+(overlap). Activity difference is 1 − Δ between each species' activity curve from the
+volunteer labels and from the other labels, averaged over species with 20 or more
+events.*
+
+What the AI's mistakes did to the ecology:
+
+- **Species disappeared.** From SpeciesNet's labels, brown hyena (8 sites by the
+  volunteer labels), Cape fox (7) and African wildcat (5) were never recorded, and
+  grey duiker was recorded at 1 site instead of 6. These are mostly nocturnal species
+  photographed in overexposed infrared.
+- **Species appeared.** A vervet monkey and a serval were recorded at one site each.
+  Both were confident mistakes, so review of the least confident events did not reach
+  them until half of all events were reviewed.
+- **Activity shifted towards the day.** SpeciesNet named only 35 of 52 steenbok events,
+  missing many at dawn and night, which moved steenbok's busiest time from 05:26 to
+  07:50 and raised its activity overlap with gemsbok from 0.79 to 0.88.
+- **Common species were barely affected.** Gemsbok, black-backed jackal and steenbok
+  were recorded at 15, 13 and 11 sites against 16, 14 and 13, and their modelled
+  occupancy differed by 0.05 to 0.08.
+
+Review of the least confident events was the most effective fix per event: 93 reviewed
+events (20%) recovered 23 of the 41 missed site records. The adapted layer helped most
+when combined with a small review: with 10% reviewed, it missed 25 site records against
+33 for SpeciesNet. At 20% the two were equal.
+
+Occupancy itself remained hard to estimate. Only gemsbok, black-backed jackal and
+steenbok were detected often enough for a reliable occupancy model; for the other
+species even the volunteer labels gave intervals wider than 0.5 or estimates at 1,
+because 20 cameras over six weeks recorded them too rarely.
+
 ## Limitations
 
 - **Small test counts for rare species.** Several species have three test crops or
@@ -168,6 +235,11 @@ common species.
   verification, and each image has one label even when two species appear in it.
 - **No empty images.** Blank images were excluded, so the false positive rate on empty
   images is unknown.
+- **A perfect reviewer.** The simulated review copies the volunteer labels. Real review
+  is not perfect: on the four-camera sample, decisions took 2 to 5 seconds and agreed
+  with the AI every time, a sign of automation bias.
+- **Few sites for ecology.** With 20 camera sites, occupancy differences of a few
+  hundredths are within the uncertainty of the estimates themselves.
 - **Unseen species.** Five species appear only in validation or test cameras (meerkat,
   leopard, cheetah, bat-eared fox, spotted hyena). The adapted layer cannot name them;
   `detect` keeps SpeciesNet's answer when SpeciesNet names them.
@@ -196,7 +268,16 @@ uv run camtraptools evaluate kgalagadi/package --truth kgalagadi/truth.csv \
     --deployment B05 --deployment B06 --deployment B08
 ```
 
-The first `evaluate` scores SpeciesNet alone, the second the adapted layer. Splits
+The first `evaluate` scores SpeciesNet alone, the second the adapted layer. For the
+ecological comparison, run the study script after `crops`, which writes one package
+per labelling and the comparison to `kgalagadi/sensitivity/`:
+
+```bash
+uv run python examples/kgalagadi/sensitivity.py kgalagadi
+uv run camtraptools compare kgalagadi/sensitivity/speciesnet --truth kgalagadi/truth.csv \
+    --other adapted=kgalagadi/sensitivity/adapted --out kgalagadi/comparison
+```
+ Splits
 depend on the number of crops per camera, so they match the ones above as long as the
 same images and labels are used.
 

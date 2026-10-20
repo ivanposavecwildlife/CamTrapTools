@@ -16,10 +16,13 @@ CamTrapTools turns a folder of SD-card images into a standard
 [Camtrap DP](https://camtrap-dp.tdwg.org) data package, checks every camera for problems,
 finds and identifies animals with [SpeciesNet](https://github.com/google/cameratrapai),
 counts independent visits, lets a person review the AI's least confident decisions
-first, and exports a validated package ready to publish on [GBIF](https://www.gbif.org).
+first, adapts the AI to the region, estimates occupancy and daily activity, and exports
+a validated package ready to publish on [GBIF](https://www.gbif.org).
 
 ```
-SD cards ─► ingest ─► check / report ─► detect (or import) ─► events ─► review ─► export ─► GBIF
+SD cards ─► ingest ─► check / report ─► detect (or import) ─► events ─► review ─► ecology ─► export ─► GBIF
+                                             ▲                            │
+                                             └── evaluate / crops / adapt ┘
 ```
 
 ![Camera health report showing a timeline per camera with highlighted gaps](docs/report.png)
@@ -102,6 +105,11 @@ flash (`cam_noflash`) and clock errors.*
   pair of species with a 95% bootstrap interval, and saves the curves as a chart.
   Reviewed decisions replace the AI's, and higher taxa are left out unless asked for
   (`--all-taxa`, `--taxon`).
+- **`compare`**: runs the ecology analyses on several labellings of the same survey
+  (the AI's labels alone, with human reviews, ground truth from `--truth`, and other
+  packages such as one with an adapted layer, `--other adapted=FOLDER`) and reports how
+  far each is from the reference: species and species-at-site records missed or wrongly
+  added, occupancy error, and how much activity patterns and overlaps change.
 - **`export`**: writes a complete Camtrap DP 1.0.2 package (`datapackage.json` and three
   tables) with time zones, coverage, contributors and licenses, using the reviewer's
   decision wherever an event was reviewed. Exported packages pass
@@ -130,6 +138,7 @@ camtraptools crops my_project --images sd_cards --out my_crops
 camtraptools adapt my_crops --out my_model
 camtraptools detect my_project --images sd_cards --adapted my_model
 camtraptools ecology my_project --out my_ecology
+camtraptools compare my_project --truth labels.csv --out my_comparison
 camtraptools export my_project --out publish --title "My survey" \
     --contributor "Your Name" --timezone Africa/Johannesburg
 ```
@@ -196,6 +205,15 @@ of 45, and none of the detections it changed on those cameras went from right to
 The full method, per-species results and limitations are in the
 [case study](docs/case-study-kgalagadi.md).
 
+### Ecological consequences
+
+From SpeciesNet's labels alone, 7 of 25 species and 41 of 113 species-at-site records
+were missing compared with the volunteer labels: brown hyena, Cape fox and African
+wildcat looked absent from the park, and steenbok looked more diurnal than it is.
+**Reviewing the least confident 20% of events recovered all but one species and cut
+missed records to 18**; reviewing half recovered all of them. A cross-fitted adapted
+layer cut missed records to 32, and to 25 with 10% of events reviewed.
+
 ![Test-camera detections that the adapted layer identified correctly](docs/adapted-examples.jpg)
 
 ## Roadmap
@@ -212,7 +230,7 @@ SD card ─► ingest/check ─► detect/events ─► review ─► ecology �
 | Detection | `detect`, `events`, `import`, `export` | SpeciesNet detection and species identification, independent events, importing other tools' results, validated Camtrap DP export | ✅ v0.2.0 |
 | Review | `review`, `review-stats` | Local web app for checking AI labels, least confident first; review statistics | ✅ v0.3.0 |
 | Evaluation | `evaluate`, `crops`, `adapt` | Per-species accuracy and confidence thresholds; training data and regional fine-tuning | ✅ v0.4.0 |
-| Ecology | `ecology` | Occupancy and activity analysis, and how sensitive results are to AI errors | In progress |
+| Ecology | `ecology`, `compare` | Occupancy and activity analysis, and how sensitive results are to AI errors | ✅ v0.5.0 |
 
 ## Development
 

@@ -385,6 +385,48 @@ def use_adapted(speciesnet_name, adapted: str, confidence: float, threshold: flo
     return not named_species or speciesnet_name in classes
 
 
+def detection_features(
+    package_dir: Path, images_dir: Path, padding: float, detection_threshold: float, backbone, device: str
+) -> tuple[pd.DataFrame, np.ndarray]:
+    """Return every animal detection at or above ``detection_threshold`` in the
+    package's SpeciesNet results, and the backbone's features of its crop (cropped with
+    ``padding``, as the training crops were), one row per detection."""
+    detections = load_detections(package_dir / RESULTS_FILE)
+    animals = detections[(detections["category"] == "animal") & (detections["conf"] >= detection_threshold)]
+    animals = animals.sort_values(["filePath", "detection"]).reset_index(drop=True)
+    batches, pending = [], []
+    for file_path, group in animals.groupby("filePath", sort=False):
+        with Image.open(images_dir / file_path) as image:
+            for row in group.itertuples():
+                box = crop_box(*image.size, (row.x, row.y, row.width, row.height), padding)
+                pending.append(image.crop(box))
+        if len(pending) >= FEATURE_BATCH_SIZE:
+            batches.append(extract_features(backbone, pending, device))
+            pending = []
+    if pending:
+        batches.append(extract_features(backbone, pending, device))
+    return animals, np.concatenate(batches) if batches else np.zeros((0, 0), dtype=np.float32)
+
+
+def answer_detections(animals: pd.DataFrame, features: np.ndarray, adapted: dict, threshold: float | None) -> pd.DataFrame:
+    """Return the adapted layer's answer for every detection, with SpeciesNet's, and
+    whether the adapted answer is used instead (see ``use_adapted``)."""
+    if len(animals):
+        labels, confidence = predict(features, adapted["weight"], adapted["bias"], adapted["classes"])
+    else:
+        labels, confidence = [], np.zeros(0)
+    answers = animals[["filePath", "detection"]].copy()
+    answers["speciesnet"] = [parse_taxon(label)[0] if isinstance(label, str) else None for label in animals["label"]]
+    answers["adapted"] = labels
+    answers["adaptedConfidence"] = confidence
+    answers["used"] = [
+        use_adapted(name, label, float(score), threshold, adapted["classes"])
+        for name, label, score in zip(answers["speciesnet"], labels, confidence, strict=True)
+    ]
+    answers["model"] = f"({len(adapted['classes'])} labels, {adapted['created']})"
+    return answers
+
+
 def classify_detections(
     package_dir: Path,
     images_dir: Path,
@@ -395,41 +437,16 @@ def classify_detections(
     speciesnet=None,
 ) -> pd.DataFrame:
     """Classify every animal detection at or above ``detection_threshold`` with an
-    adapted layer, cropping it as the training crops were cropped, and save the
-    answers as ``adapted.csv`` in the package.
+    adapted layer and save the answers as ``adapted.csv`` in the package.
 
     ``threshold`` overrides the layer's own threshold. Each row says whether the
     adapted answer is used instead of SpeciesNet's (see ``use_adapted``).
     """
     require_torch()
-    threshold = adapted["threshold"] if threshold is None else threshold
-    detections = load_detections(package_dir / RESULTS_FILE)
-    animals = detections[(detections["category"] == "animal") & (detections["conf"] >= detection_threshold)]
-    animals = animals.sort_values(["filePath", "detection"]).reset_index(drop=True)
     backbone, _, _, _ = speciesnet or load_speciesnet(adapted["baseModel"])
-    device = device or best_device()
-    batches, pending = [], []
-    for file_path, group in animals.groupby("filePath", sort=False):
-        with Image.open(images_dir / file_path) as image:
-            for row in group.itertuples():
-                box = crop_box(*image.size, (row.x, row.y, row.width, row.height), adapted["padding"])
-                pending.append(image.crop(box))
-        if len(pending) >= FEATURE_BATCH_SIZE:
-            batches.append(extract_features(backbone, pending, device))
-            pending = []
-    if pending:
-        batches.append(extract_features(backbone, pending, device))
-    width = adapted["weight"].shape[0]
-    features = np.concatenate(batches) if batches else np.zeros((0, width), dtype=np.float32)
-    labels, confidence = predict(features, adapted["weight"], adapted["bias"], adapted["classes"])
-    answers = animals[["filePath", "detection"]].copy()
-    answers["speciesnet"] = [parse_taxon(label)[0] if isinstance(label, str) else None for label in animals["label"]]
-    answers["adapted"] = labels
-    answers["adaptedConfidence"] = confidence
-    answers["used"] = [
-        use_adapted(name, label, float(score), threshold, adapted["classes"])
-        for name, label, score in zip(answers["speciesnet"], labels, confidence, strict=True)
-    ]
-    answers["model"] = f"({len(adapted['classes'])} labels, {adapted['created']})"
+    animals, features = detection_features(
+        package_dir, images_dir, adapted["padding"], detection_threshold, backbone, device or best_device()
+    )
+    answers = answer_detections(animals, features, adapted, adapted["threshold"] if threshold is None else threshold)
     answers.to_csv(package_dir / ADAPTED_FILE, index=False)
     return answers

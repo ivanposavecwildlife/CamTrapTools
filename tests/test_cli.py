@@ -647,3 +647,39 @@ def test_ecology_command_reports_occupancy_model(tmp_path):
     assert "Daily activity (taxa with 2 or more events), busiest time of day:" in result.output
     assert "Vulpes chama: " in result.output
     assert (tmp_path / "out" / "activity.svg").exists()
+
+
+def test_compare_command_reports_differences(tmp_path):
+    from test_compare import make_package, write_truth
+
+    package = make_package(tmp_path)
+
+    result = runner.invoke(
+        app, ["compare", str(package), "--out", str(tmp_path / "out"), "--truth", str(write_truth(tmp_path))]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Sources: machine, truth; compared with truth." in result.output
+    assert "Differences from the reference:" in result.output
+    assert "Sites where each species was recorded, where sources differ:" in result.output
+    assert "Canis mesomelas" in result.output
+
+
+def test_compare_command_with_one_source(tmp_path):
+    from test_compare import make_package
+
+    result = runner.invoke(app, ["compare", str(make_package(tmp_path)), "--out", str(tmp_path / "out")])
+
+    assert result.exit_code == 0, result.output
+    assert "Only one source" in result.output
+
+
+def test_compare_command_checks_other_packages(tmp_path):
+    from test_compare import make_package
+
+    result = runner.invoke(
+        app, ["compare", str(make_package(tmp_path)), "--out", str(tmp_path / "out"), "--other", "adapted"]
+    )
+
+    assert result.exit_code == 2
+    assert "NAME=PACKAGE" in result.output

@@ -12,6 +12,7 @@ from camtraptools import (
     activity,
     adapt,
     check,
+    compare,
     crops,
     detect,
     ecology,
@@ -694,3 +695,89 @@ def report_activity(summary: pd.DataFrame, overlaps: pd.DataFrame, min_events: i
                 f"  {row.first} & {row.second}: {row.overlap:.2f} ({row.overlapLower:.2f}–{row.overlapUpper:.2f}, "
                 f"{row.estimator})"
             )
+
+
+def parse_other(value: str) -> tuple[str, Path]:
+    """Split a NAME=PACKAGE option into its name and folder."""
+    name, separator, path = value.partition("=")
+    if not separator or not name or not path:
+        raise typer.BadParameter(f"expected NAME=PACKAGE, got {value!r}")
+    if not (Path(path) / detect.OBSERVATIONS_FILE).exists():
+        raise typer.BadParameter(f"no observations.csv in {path}")
+    return name, Path(path)
+
+
+@app.command("compare")
+def compare_cmd(
+    package: Annotated[
+        Path,
+        typer.Argument(exists=True, file_okay=False, help="Package folder with events from `camtraptools events`."),
+    ],
+    out: Annotated[Path, typer.Option(help="Folder for each source's ecology results and the comparison.")],
+    truth: Annotated[
+        Path | None,
+        typer.Option(exists=True, dir_okay=False, help="CSV of image labels (filePath, scientificName) as ground truth."),
+    ] = None,
+    other: Annotated[
+        list[str] | None,
+        typer.Option(help="Another package of the same survey as NAME=FOLDER, e.g. adapted=survey_adapted; repeatable."),
+    ] = None,
+    occasion_days: Annotated[
+        int, typer.Option(min=1, help="Days per sampling occasion in the detection histories.")
+    ] = ecology.DEFAULT_OCCASION_DAYS,
+    min_activity_events: Annotated[
+        int, typer.Option(min=2, help="Fewest events for a taxon's activity curve and overlaps.")
+    ] = activity.DEFAULT_MIN_EVENTS,
+) -> None:
+    """Compare occupancy and activity between label sources: machine, reviewed, truth and other packages."""
+    if not (package / detect.OBSERVATIONS_FILE).exists():
+        typer.echo(f"Error: no observations.csv in {package}; run `camtraptools detect` first.", err=True)
+        raise typer.Exit(1)
+    others = dict(parse_other(value) for value in other or [])
+    try:
+        reference, comparison, overlaps, scores = compare.run(
+            package, out, truth, others, occasion_days, min_activity_events
+        )
+    except ValueError as error:
+        typer.echo(f"Error: {error}", err=True)
+        raise typer.Exit(1) from error
+    names = list(dict.fromkeys(comparison["source"])) if not comparison.empty else [reference]
+    typer.echo(f"Sources: {', '.join(names)}; compared with {reference}.")
+    if scores.empty:
+        typer.echo("Only one source; add --truth, reviews or --other to compare.")
+        return
+    typer.echo("\nDifferences from the reference:")
+    typer.echo(scores.to_string(na_rep="–"))
+    typer.echo(
+        "(siteRecords: species recorded at a site; errors are mean absolute differences over species, "
+        "or over species pairs for overlap; activityDifference: 1 − overlap of each species' own activity curves)"
+    )
+
+    def wide(column: str) -> pd.DataFrame:
+        return comparison.pivot_table(index="taxon", columns="source", values=column, aggfunc="first").reindex(
+            columns=names
+        )
+
+    sites = wide("sitesDetected").fillna(0).astype(int)
+    differing = sites[sites.nunique(axis=1) > 1].sort_values(reference, ascending=False)
+    if not differing.empty:
+        typer.echo("\nSites where each species was recorded, where sources differ:")
+        typer.echo(differing.to_string())
+    if "occupancy" in comparison.columns:
+        occupancy = wide("occupancy").dropna(how="all")
+        if not occupancy.empty:
+            typer.echo("\nModelled occupancy (– where a source could not model the species):")
+            typer.echo(occupancy.sort_values(reference, ascending=False).to_string(na_rep="–"))
+    if "activityPeak" in comparison.columns:
+        peaks = wide("activityPeak").dropna(how="all")
+        if not peaks.empty:
+            typer.echo("\nBusiest time of day:")
+            typer.echo(peaks.to_string(na_rep="–"))
+    if not overlaps.empty:
+        table = overlaps.pivot_table(index=["first", "second"], columns="source", values="overlap", aggfunc="first")
+        typer.echo("\nActivity overlap:")
+        typer.echo(table.reindex(columns=[name for name in names if name in table.columns]).to_string(na_rep="–"))
+    typer.echo(
+        f"\nWrote {out / compare.SCORES_FILE}, {out / compare.COMPARISON_FILE}, "
+        f"{out / compare.OVERLAP_COMPARISON_FILE} and one folder per source"
+    )

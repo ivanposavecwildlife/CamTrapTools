@@ -76,13 +76,21 @@ def effort_matrix(deployments: pd.DataFrame, occasion_days: int = DEFAULT_OCCASI
     return effort
 
 
-def animal_events(package_dir: Path, deployments: pd.DataFrame) -> pd.DataFrame:
-    """Return every animal event with its site, day and scientific name, using the
-    reviewer's decision wherever an event was reviewed."""
-    observations = prefer_human(pd.read_csv(package_dir / OBSERVATIONS_FILE, dtype=str))
-    events = observations[
-        (observations["observationLevel"] == "event") & (observations["observationType"] == "animal")
-    ].copy()
+def event_observations(package_dir: Path, use_reviews: bool = True) -> pd.DataFrame:
+    """Return the package's event-level observations: the reviewer's decision wherever
+    an event was reviewed, or with ``use_reviews`` off, the machine's for every event."""
+    observations = pd.read_csv(package_dir / OBSERVATIONS_FILE, dtype=str)
+    if use_reviews:
+        observations = prefer_human(observations)
+    else:
+        observations = observations[observations["classificationMethod"] != "human"]
+    return observations[observations["observationLevel"] == "event"]
+
+
+def animal_events(observations: pd.DataFrame, deployments: pd.DataFrame) -> pd.DataFrame:
+    """Return every animal event among event-level ``observations`` with its site,
+    day, start time and scientific name."""
+    events = observations[observations["observationType"] == "animal"].copy()
     events["site"] = events["deploymentID"].map(location_of(deployments))
     events["day"] = pd.to_datetime(events["eventStart"], format="ISO8601", errors="coerce").dt.date
     return events.dropna(subset=["day"])[["eventID", "site", "day", "eventStart", "scientificName"]]
@@ -287,8 +295,9 @@ def file_name(taxon: str) -> str:
     return taxon.replace(" ", "_") + ".csv"
 
 
-def run(
-    package_dir: Path,
+def analyse(
+    events: pd.DataFrame,
+    deployments: pd.DataFrame,
     out_dir: Path,
     occasion_days: int = DEFAULT_OCCASION_DAYS,
     taxa: list[str] | None = None,
@@ -301,13 +310,11 @@ def run(
     least ``min_activity_events`` events also get an activity curve, a peak hour and
     their overlap with each other (see ``activity.run``).
 
-    By default every species is included; ``all_taxa`` adds higher taxa such as
-    ``Bovidae``, and ``taxa`` chooses taxa by name. Returns the summary, the number of
-    events left out by taxon, and the overlaps.
+    ``events`` comes from ``animal_events``. By default every species is included;
+    ``all_taxa`` adds higher taxa such as ``Bovidae``, and ``taxa`` chooses taxa by
+    name. Returns the summary, the number of events left out by taxon, and the overlaps.
     """
-    deployments = pd.read_csv(package_dir / "deployments.csv", dtype=str)
     effort = effort_matrix(deployments, occasion_days)
-    events = animal_events(package_dir, deployments)
     named = events.dropna(subset=["scientificName"])
     if taxa:
         chosen = [name for name in taxa if name in set(named["scientificName"])]
@@ -330,3 +337,18 @@ def run(
         summary = summary.join(peaks[["peak"]].rename(columns={"peak": "activityPeak"}))
     summary.to_csv(out_dir / SUMMARY_FILE)
     return summary, left_out.value_counts(), overlaps
+
+
+def run(
+    package_dir: Path,
+    out_dir: Path,
+    occasion_days: int = DEFAULT_OCCASION_DAYS,
+    taxa: list[str] | None = None,
+    all_taxa: bool = False,
+    min_activity_events: int = activity.DEFAULT_MIN_EVENTS,
+) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
+    """Run ``analyse`` on the package's events, using reviewed decisions where there
+    are any."""
+    deployments = pd.read_csv(package_dir / "deployments.csv", dtype=str)
+    events = animal_events(event_observations(package_dir), deployments)
+    return analyse(events, deployments, out_dir, occasion_days, taxa, all_taxa, min_activity_events)

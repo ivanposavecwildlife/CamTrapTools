@@ -31,6 +31,16 @@ All notable changes to this project are documented here. The format follows
   both have 75 or more events; Ridout & Linkie 2009) comes with a 95% percentile
   bootstrap interval from 999 resamples. Writes `activity.csv`, `overlap.csv` and an
   `activity.svg` chart of the six most recorded species.
+- `compare` command: runs the ecology analyses on every labelling of a survey (the
+  machine's labels alone, with reviews, ground truth from `--truth`, and other packages
+  with `--other NAME=FOLDER`) and compares them with the reference (truth if given,
+  otherwise the reviews): species and species-at-site records missed or added, mean
+  naive and modelled occupancy error, the difference between each species' activity
+  curves (1 − Δ) and the error in overlaps between species. Writes each source's
+  ecology results, `scores.csv`, `comparison.csv` and `overlap_comparison.csv`.
+- Ecological consequences in the case study, with `examples/kgalagadi/sensitivity.py`,
+  which builds labellings with cross-fitted adapted layers and with simulated review of
+  the least confident 5% to 50% of events, and compares them with the volunteer labels.
 - `examples/kgalagadi/prepare.py` also writes a field sheet with each camera's season,
   from its first and last capture including blank ones.
 
