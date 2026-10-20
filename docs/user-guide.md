@@ -120,7 +120,7 @@ camtraptools --version
 ```
 
 ```
-CamTrapTools 0.7.0
+CamTrapTools 0.7.1
 ```
 
 `camtraptools --help` lists all commands, and `camtraptools COMMAND --help` explains

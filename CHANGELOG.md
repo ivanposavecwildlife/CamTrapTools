@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-10-20
+
+Tested on a second survey (Orinoquía, Colombia): COCO Camera Traps labels, smarter name
+matching, a "more specific" outcome in `evaluate`, fixes for Intel Macs and resumed
+runs, and macOS back in CI.
+
 ### Added
 
 - `evaluate` has a fifth outcome, **more specific**: the AI names a taxon within the
@@ -27,7 +33,6 @@ All notable changes to this project are documented here. The format follows
   it ends (`cattle`: domestic cattle) or that starts it (`red brocket deer`: red
   brocket), and a species is preferred when a name is also a genus (`puma`: *Puma
   concolor*). A plain `unknown` label counts as not labelled.
-
 - When `detect` continues an interrupted run, it counts only images SpeciesNet has
   finished; its saved progress also lists images not reached yet, which are processed
   again.
@@ -353,6 +358,7 @@ First release: ingest, quality checks and an HTML health report.
   summary table and all issues, in light and dark mode.
 - Continuous integration on Python 3.11–3.14 (Linux) and on Windows and macOS.
 
+[0.7.1]: https://github.com/ivanposavecwildlife/CamTrapTools/releases/tag/v0.7.1
 [0.7.0]: https://github.com/ivanposavecwildlife/CamTrapTools/releases/tag/v0.7.0
 [0.6.0]: https://github.com/ivanposavecwildlife/CamTrapTools/releases/tag/v0.6.0
 [0.5.0]: https://github.com/ivanposavecwildlife/CamTrapTools/releases/tag/v0.5.0
