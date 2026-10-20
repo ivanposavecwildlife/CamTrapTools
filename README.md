@@ -106,7 +106,9 @@ flash (`cam_noflash`) and clock errors.*
   al. 2002) corrects for animals being missed where they are present: it estimates
   occupancy with a 95% profile-likelihood interval and the chance of recording the
   species per occasion, using each occasion's camera days, and warns when detections are
-  too rare for a reliable estimate. For species with 20 or more events it also draws
+  too rare for a reliable estimate. Site covariates from the field sheet (habitat,
+  camera height…) can be added to occupancy and detection, with models compared by
+  AIC. For species with 20 or more events it also draws
   daily activity curves (circular kernel densities, as in the R package `overlap`),
   reports each species' busiest time of day and the overlap coefficient between every
   pair of species with a 95% bootstrap interval, and saves the curves as a chart. A

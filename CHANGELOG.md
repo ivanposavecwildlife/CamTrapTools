@@ -8,6 +8,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Occupancy with site covariates in `ecology`: `--occupancy-covariate` and
+  `--detection-covariate` name deployment columns (from the field sheet) that may
+  affect occupancy or daily detection, through logistic regression with numeric
+  covariates standardised and categorical ones coded per level. For each species
+  recorded at three or more sites, models without covariates, with covariates on
+  occupancy, on detection and on both are compared by AIC; the best model's effects
+  with 95% Wald intervals and occupancy per level are printed, species at fewer than
+  10 sites are flagged as exploratory, and every model is saved in
+  `occupancy_covariates.csv`.
 - Species richness in `ecology`: the species accumulation curve over camera-days by
   exact rarefaction (`richness.csv`, chart in `richness.svg`) and the Chao2 estimate of
   total species richness with a 95% log-normal interval and survey completeness, from

@@ -650,6 +650,17 @@ def test_ecology_command_reports_occupancy_model(tmp_path):
     assert "Vulpes chama: " in result.output
     assert (tmp_path / "out" / "activity.svg").exists()
 
+    deployments = pd.read_csv(package / "deployments.csv")
+    deployments["habitat"] = ["forest", "grassland"] * 4
+    deployments.to_csv(package / "deployments.csv", index=False)
+    result = runner.invoke(
+        app, ["ecology", str(package), "--out", str(tmp_path / "out"), "--occupancy-covariate", "habitat"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Occupancy with site covariates" in result.output
+    assert "⚠ only 4 sites, exploratory" in result.output
+
 
 def test_compare_command_reports_differences(tmp_path):
     from test_compare import make_package, write_truth

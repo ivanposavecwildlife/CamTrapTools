@@ -161,7 +161,17 @@ def log_likelihood(parameters, detections: np.ndarray, days: np.ndarray) -> floa
     detection probability is 1 − (1 − q)^days. A site with a record is occupied; a
     site without one is either occupied and missed every time, or unoccupied.
     """
-    psi, daily = sigmoid(parameters[0]), sigmoid(parameters[1])
+    return site_log_likelihood(sigmoid(parameters[0]), sigmoid(parameters[1]), detections, days)
+
+
+def site_log_likelihood(psi, daily, detections: np.ndarray, days: np.ndarray) -> float:
+    """Return the occupancy model's log-likelihood for occupancy ``psi`` and daily
+    detection probability ``daily``, either one value for all sites or one per site
+    (see ``log_likelihood``)."""
+    psi = np.asarray(psi, dtype=float)
+    daily = np.asarray(daily, dtype=float)
+    if daily.ndim == 1:
+        daily = daily[:, None]
     surveyed = ~np.isnan(detections)
     recorded = np.nan_to_num(detections) == 1
     log_missed = np.where(surveyed, days * np.log1p(-daily), 0.0)
@@ -317,6 +327,8 @@ def analyse(
     taxa: list[str] | None = None,
     all_taxa: bool = False,
     min_activity_events: int = activity.DEFAULT_MIN_EVENTS,
+    occupancy_covariates: list[str] | None = None,
+    detection_covariates: list[str] | None = None,
 ) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
     """Write a detection history per taxon in ``out_dir/histories/``, the sampling
     effort in ``effort.csv``, the relative abundance index per site in ``rai.csv`` and,
@@ -325,7 +337,10 @@ def analyse(
     least ``min_activity_events`` events also get an activity curve, a peak hour and
     their overlap with each other (see ``activity.run``). The species accumulation
     curve and the Chao2 estimate of richness are written too (see ``richness.run``)
-    and returned in ``summary.attrs["richness"]``.
+    and returned in ``summary.attrs["richness"]``. With ``occupancy_covariates`` or
+    ``detection_covariates`` (deployment columns), occupancy models with those site
+    covariates are compared by AIC (see ``covariates.run``), with the result in
+    ``summary.attrs["covariates"]``.
 
     ``events`` comes from ``animal_events``. By default every species is included;
     ``all_taxa`` adds higher taxa such as ``Bovidae``, and ``taxa`` chooses taxa by
@@ -359,6 +374,12 @@ def analyse(
         summary = summary.join(peaks[["peak"]].rename(columns={"peak": "activityPeak"}))
     summary.to_csv(out_dir / SUMMARY_FILE)
     summary.attrs["richness"] = estimate
+    if occupancy_covariates or detection_covariates:
+        from camtraptools import covariates
+
+        summary.attrs["covariates"] = covariates.run(
+            histories, effort, deployments, occupancy_covariates or [], detection_covariates or [], out_dir
+        )
     return summary, left_out.value_counts(), overlaps
 
 
@@ -369,9 +390,14 @@ def run(
     taxa: list[str] | None = None,
     all_taxa: bool = False,
     min_activity_events: int = activity.DEFAULT_MIN_EVENTS,
+    occupancy_covariates: list[str] | None = None,
+    detection_covariates: list[str] | None = None,
 ) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
     """Run ``analyse`` on the package's events, using reviewed decisions where there
     are any."""
     deployments = pd.read_csv(package_dir / "deployments.csv", dtype=str)
     events = animal_events(event_observations(package_dir), deployments)
-    return analyse(events, deployments, out_dir, occasion_days, taxa, all_taxa, min_activity_events)
+    return analyse(
+        events, deployments, out_dir, occasion_days, taxa, all_taxa, min_activity_events,
+        occupancy_covariates, detection_covariates,
+    )

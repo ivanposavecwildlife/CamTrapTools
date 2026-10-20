@@ -649,6 +649,35 @@ Struthio camelus              0.30       1.00    0.25–1.00                  0.
   rare species from a common but hard-to-see one; do not report that estimate. More
   cameras or a longer survey help.
 
+**Site covariates.** If occupancy or detection may depend on something about the
+sites, add it as a field-sheet column (for example `habitat` or `cameraHeight`) and
+name it:
+
+```bash
+camtraptools ecology my_survey --out my_ecology \
+    --occupancy-covariate habitat --detection-covariate cameraHeight
+```
+
+For each species recorded at three or more sites, four models are compared by AIC:
+no covariates, covariates on occupancy, on detection, and on both.
+
+```
+Occupancy with site covariates (best model by AIC; ΔAIC of the model without covariates; …):
+  Vulpes chama: ψ(habitat) p(cameraHeight), ΔAIC without covariates 6.3
+    occupancy habitat=grassland: +1.52 (+0.61 to +2.43); detection cameraHeight: +0.77 (+0.40 to +1.14)
+    occupancy by level: baseline: 0.38, habitat=grassland: 0.73
+  A ΔAIC below 2 means the covariates add little; above 4, they clearly improve the model.
+```
+
+- ψ is occupancy and p detection; `ψ(.)` means without covariates.
+- Effects are on the logit scale: positive means higher occupancy or detection. For
+  numeric covariates the effect is per standard deviation; for categories it is
+  relative to the first level (alphabetically), the "baseline".
+- An interval that includes 0 means the data cannot tell the direction of the effect.
+- Species recorded at fewer than 10 sites are marked as exploratory: with so few
+  sites, a covariate can look important by chance.
+- All models and coefficients are saved in `occupancy_covariates.csv`.
+
 **3. Daily activity**, for species with 20 or more events:
 
 ```
@@ -841,7 +870,7 @@ original answer next to yours.
 | `evaluate PACKAGE` | Accuracy and thresholds | `--truth`, `--target-precision`, `--report`, `--images`, `--deployment` |
 | `crops PACKAGE` | Training crops | `--images`, `--out`, `--truth`, `--padding`, `--val`, `--test`, `--seed` |
 | `adapt CROPS` | Train the adapted layer | `--out`, `--epochs`, `--learning-rate`, `--balanced`, `--seed`, `--device` |
-| `ecology PACKAGE` | Occupancy and activity | `--out`, `--occasion-days`, `--taxon`, `--all-taxa`, `--min-activity-events` |
+| `ecology PACKAGE` | Occupancy, abundance index, activity and richness | `--out`, `--occasion-days`, `--taxon`, `--all-taxa`, `--min-activity-events`, `--occupancy-covariate`, `--detection-covariate` |
 | `compare PACKAGE` | Compare labellings | `--out`, `--truth`, `--other`, `--occasion-days`, `--min-activity-events` |
 | `export PACKAGE` | Camtrap DP for GBIF | `--out`, `--title`, `--contributor`, `--timezone`, `--sampling-design`, `--license`, `--media-license`, `--exclude-humans`, `--coordinate-decimals` |
 

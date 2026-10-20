@@ -13,6 +13,7 @@ from camtraptools import (
     adapt,
     check,
     compare,
+    covariates,
     crops,
     detect,
     ecology,
@@ -675,13 +676,23 @@ def ecology_cmd(
     min_activity_events: Annotated[
         int, typer.Option(min=2, help="Fewest events for a taxon's activity curve and overlaps.")
     ] = activity.DEFAULT_MIN_EVENTS,
+    occupancy_covariate: Annotated[
+        list[str] | None,
+        typer.Option(help="Field-sheet column that may affect occupancy, e.g. habitat; repeatable."),
+    ] = None,
+    detection_covariate: Annotated[
+        list[str] | None,
+        typer.Option(help="Field-sheet column that may affect detection, e.g. cameraHeight; repeatable."),
+    ] = None,
 ) -> None:
     """Estimate occupancy (naive and modelled) and daily activity for each species."""
     if not (package / detect.OBSERVATIONS_FILE).exists():
         typer.echo(f"Error: no observations.csv in {package}; run `camtraptools detect` first.", err=True)
         raise typer.Exit(1)
     try:
-        summary, left_out, overlaps = ecology.run(package, out, occasion_days, taxon, all_taxa, min_activity_events)
+        summary, left_out, overlaps = ecology.run(
+            package, out, occasion_days, taxon, all_taxa, min_activity_events, occupancy_covariate, detection_covariate
+        )
     except ValueError as error:
         typer.echo(f"Error: {error}", err=True)
         raise typer.Exit(1) from error
@@ -722,6 +733,7 @@ def ecology_cmd(
         )
     report_activity(summary, overlaps, min_activity_events)
     report_richness(summary.attrs.get("richness"))
+    report_covariates(summary.attrs.get("covariates"))
     if not left_out.empty and not taxon:
         reason = "not identified to species" if not all_taxa else "not identified"
         typer.echo(f"\nLeft out {crops.plural(int(left_out.sum()), 'event')} {reason}: "
@@ -921,3 +933,25 @@ def report_richness(estimate: dict | None) -> None:
         f"  {estimate['uniques']} species recorded on only one camera-day and "
         f"{estimate['duplicates']} on two; many such rare records mean more species are likely still unrecorded."
     )
+
+
+def report_covariates(models: pd.DataFrame | None) -> None:
+    """Print the best covariate model for each species and its effects."""
+    if models is None:
+        return
+    if models.empty:
+        typer.echo("\nNo taxon was recorded at enough sites for covariate models.")
+        return
+    typer.echo(
+        "\nOccupancy with site covariates (best model by AIC; ΔAIC of the model without covariates; "
+        "effects on the logit scale with 95% intervals, numeric covariates per standard deviation):"
+    )
+    for name, row in models.iterrows():
+        few = f" ⚠ only {row['sitesDetected']} sites, exploratory" if row["sitesDetected"] < covariates.FEW_SITES else ""
+        typer.echo(f"  {name}: {row['bestModel']}, ΔAIC without covariates {row['nullDeltaAIC']:g}{few}")
+        if row["effects"]:
+            typer.echo(f"    {row['effects']}")
+        if isinstance(row["occupancyByLevel"], dict):
+            levels = ", ".join(f"{level}: {value:.2f}" for level, value in row["occupancyByLevel"].items())
+            typer.echo(f"    occupancy by level: {levels}")
+    typer.echo("  A ΔAIC below 2 means the covariates add little; above 4, they clearly improve the model.")
