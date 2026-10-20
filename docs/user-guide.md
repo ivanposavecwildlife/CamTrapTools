@@ -661,13 +661,19 @@ camtraptools ecology my_survey --out my_ecology \
 For each species recorded at three or more sites, four models are compared by AIC:
 no covariates, covariates on occupancy, on detection, and on both.
 
+On a simulated survey of 120 sites, where a species was more likely to occupy
+grassland and easier to detect with higher cameras:
+
 ```
 Occupancy with site covariates (best model by AIC; ΔAIC of the model without covariates; …):
-  Vulpes chama: ψ(habitat) p(cameraHeight), ΔAIC without covariates 6.3
-    occupancy habitat=grassland: +1.52 (+0.61 to +2.43); detection cameraHeight: +0.77 (+0.40 to +1.14)
-    occupancy by level: baseline: 0.38, habitat=grassland: 0.73
+  Vulpes chama: ψ(habitat) p(cameraHeight), ΔAIC without covariates 111.48
+    occupancy habitat=grassland: +1.51 (+0.70 to +2.33); detection cameraHeight: +0.83 (+0.66 to +1.00)
+    occupancy by level: baseline: 0.31, habitat=grassland: 0.67
   A ΔAIC below 2 means the covariates add little; above 4, they clearly improve the model.
 ```
+
+The simulated effects were +1.5 for grassland and +0.8 for camera height; both were
+recovered.
 
 - ψ is occupancy and p detection; `ψ(.)` means without covariates.
 - Effects are on the logit scale: positive means higher occupancy or detection. For
