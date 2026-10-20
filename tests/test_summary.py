@@ -47,5 +47,5 @@ def test_labelling_reports_classifiers_reviews_and_accuracy(tmp_path):
         "classifiers": ["SpeciesNet 4.0.3a"],
         "events": 2,
         "reviewed": 1,
-        "accuracy": {"events": 2, "correct": 1, "higher": 0, "wrong": 1},
+        "accuracy": {"events": 2, "correct": 1, "higher": 0, "finer": 0, "wrong": 1},
     }

@@ -139,7 +139,8 @@ makes this estimate more reliable.{% endif %}</p>
 their decisions replace the AI's.{% else %}No events were reviewed by a person, so all labels are the AI's.{% endif %}</p>
 {% if labels.accuracy %}
 <p>Compared with reference labels for {{ labels.accuracy.events }} events, the labels were correct for
-{{ labels.accuracy.correct }}, correct only above species level for {{ labels.accuracy.higher }}, and wrong for
+{{ labels.accuracy.correct }}, correct only above species level for {{ labels.accuracy.higher }},{% if labels.accuracy.finer %}
+more specific than the reference (which could not confirm the species) for {{ labels.accuracy.finer }},{% endif %} and wrong for
 {{ labels.accuracy.wrong }}.</p>
 {% endif %}
 

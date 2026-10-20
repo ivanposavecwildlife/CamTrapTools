@@ -69,6 +69,7 @@ def labelling(package_dir: Path) -> dict:
                 "events": len(evaluation),
                 "correct": int(outcomes.get("correct", 0)),
                 "higher": int(outcomes.get("not to species", 0)),
+                "finer": int(outcomes.get("more specific", 0)),
                 "wrong": int(outcomes.get("wrong", 0)),
             }
     return result

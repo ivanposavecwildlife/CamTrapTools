@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `evaluate` has a fifth outcome, **more specific**: the AI names a taxon within the
+  reference's label (a nine-banded armadillo where the reference says only
+  Dasypodidae). It was counted as wrong; it now counts as right for precision, and the
+  survey summary reports it.
 - `labels` reads COCO Camera Traps JSON files, the format of LILA BC datasets and
   MegaDetector tools (`--format coco`, detected automatically for `.json` files), with
   category names such as `collared_peccary` turned into words.

@@ -494,6 +494,7 @@ Compared 60 events with labels in truth.csv.
 |---|---|
 | correct | Same label as the reference |
 | not to species | A correct higher taxon, such as *Bovidae* for a gemsbok |
+| more specific | A taxon within the reference's label, such as a nine-banded armadillo where the reference says only "armadillo family"; the reference can neither confirm nor contradict it, and it counts as right for precision |
 | unverified | A higher taxon, but the truth file has no ancestry to check it |
 | wrong | A different label |
 

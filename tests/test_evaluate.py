@@ -30,6 +30,10 @@ ANCESTRY = {"Sylvicapra grimmia": {"Sylvicapra", "Bovidae", "Artiodactyla", "Mam
         ("blank", "Bovidae", "wrong"),
         ("Oryx gazella", "blank", "wrong"),
         ("Oryx gazella", "animal", "wrong"),
+        ("Bovidae", "Sylvicapra grimmia", "more specific"),
+        ("Mammalia", "Vulpes chama", "more specific"),
+        ("Canidae", "Sylvicapra grimmia", "wrong"),
+        ("Rodentia", "animal", "wrong"),
     ],
 )
 def test_outcome(truth, ai, expected):

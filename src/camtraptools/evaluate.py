@@ -16,7 +16,7 @@ from camtraptools.importer import match_path
 from camtraptools.reviews import load_reviews, order_events
 
 EVALUATION_FILE = "evaluation.csv"
-OUTCOMES = ["correct", "not to species", "unverified", "wrong"]
+OUTCOMES = ["correct", "not to species", "more specific", "unverified", "wrong"]
 RANKS = ["genus", "family", "order", "class"]
 NON_TAXON_LABELS = {"animal", "blank", "human", "vehicle", "unknown", "unclassified"}
 
@@ -103,12 +103,17 @@ def ancestry_from_results(package_dir: Path) -> dict[str, set[str]]:
 
 def outcome(truth: str, ai: str, ancestry: dict[str, set[str]] | None = None) -> str:
     """Return whether the AI's label is correct, correct only above species level
-    (e.g. ``Bovidae`` for a duiker), unverified (a higher taxon, but the truth's
-    ancestry is unknown), or wrong."""
+    (e.g. ``Bovidae`` for a duiker), more specific than the reference (e.g. a
+    nine-banded armadillo where the reference says only ``Dasypodidae``, which the
+    reference cannot confirm or contradict), unverified (a higher taxon, but the
+    truth's ancestry is unknown), or wrong."""
     if ai == truth:
         return "correct"
-    ai_is_higher_taxon = ai not in NON_TAXON_LABELS and " " not in ai
-    if not ai_is_higher_taxon or truth in NON_TAXON_LABELS:
+    if ai in NON_TAXON_LABELS or truth in NON_TAXON_LABELS:
+        return "wrong"
+    if truth in (ancestry or {}).get(ai, set()):
+        return "more specific"
+    if " " in ai:
         return "wrong"
     known = (ancestry or {}).get(truth)
     if known is None:
@@ -123,7 +128,7 @@ def compare(truth: pd.Series, ai: pd.Series, ancestry: dict[str, set[str]] | Non
     return compared
 
 
-RIGHT_OUTCOMES = {"correct", "not to species"}
+RIGHT_OUTCOMES = {"correct", "not to species", "more specific"}
 
 
 def per_class_metrics(compared: pd.DataFrame) -> pd.DataFrame:
