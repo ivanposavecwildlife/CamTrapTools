@@ -206,3 +206,24 @@ def test_occupancy_models_skip_taxa_at_few_sites():
 
     assert models.index.tolist() == ["common"]
     assert {"occupancy", "occupancyLower", "occupancyUpper", "warning"} <= set(models.columns)
+
+
+def test_relative_abundance_is_events_per_100_camera_days():
+    effort = pd.DataFrame({"o1": [7, 3], "o2": [3, 0]}, index=pd.Index(["North", "South"], name="site"))
+    events = pd.DataFrame({"site": ["North", "North", "South"], "scientificName": ["Vulpes chama"] * 2 + ["Oryx gazella"]})
+
+    rai = ecology.relative_abundance(events, effort, ["Vulpes chama", "Oryx gazella"])
+
+    assert rai.loc["North"].tolist() == [20.0, 0.0]
+    assert rai.loc["South"].tolist() == [0.0, 33.33]
+    assert rai.loc["all sites"].tolist() == [15.38, 7.69]
+
+
+def test_run_writes_relative_abundance(tmp_path):
+    package = make_package(tmp_path)
+
+    summary, _, _ = ecology.run(package, tmp_path / "out")
+
+    assert summary.loc["Vulpes chama", "rai"] == round(2 / 17 * 100, 2)
+    rai = pd.read_csv(tmp_path / "out" / ecology.RAI_FILE, index_col="site")
+    assert rai.index.tolist() == ["North", "South", "all sites"]

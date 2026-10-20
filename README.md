@@ -93,7 +93,8 @@ flash (`cam_noflash`) and clock errors.*
   threshold, unless SpeciesNet named a species the layer was never trained on.
 - **`ecology`**: turns events into a detection history per species (camera sites by
   sampling occasions of `--occasion-days`, default 7: recorded, not recorded, or camera
-  not running), the sampling effort per site and occasion, and naive occupancy: the
+  not running), the sampling effort per site and occasion, the relative abundance
+  index (events per 100 camera-days) per species and site, and naive occupancy: the
   share of surveyed sites where each species was recorded, with its weekly detection
   rate. For species recorded at three or more sites, an occupancy model (MacKenzie et
   al. 2002) corrects for animals being missed where they are present: it estimates

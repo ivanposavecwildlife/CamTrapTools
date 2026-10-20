@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Relative abundance index in `ecology`: independent events per 100 camera-days for
+  each species, in `occupancy.csv` and the printed table, and per site and species in
+  `rai.csv`.
 - `detect` saves SpeciesNet's progress every 10 minutes and continues an interrupted
   run when the same command is run again, discarding saved progress from a run with
   other settings; it shows SpeciesNet's progress bars.

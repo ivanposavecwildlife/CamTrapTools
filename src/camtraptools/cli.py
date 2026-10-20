@@ -673,8 +673,11 @@ def ecology_cmd(
     if summary.empty:
         typer.echo("No animal events to analyse.")
         raise typer.Exit(1)
-    typer.echo("\nNaive occupancy (share of surveyed sites where the taxon was recorded):")
-    naive = ["events", "sitesDetected", "sitesSurveyed", "naiveOccupancy", "detectionRate"]
+    typer.echo(
+        "\nRecords and naive occupancy (rai: events per 100 camera-days; naiveOccupancy: share of surveyed "
+        "sites where the taxon was recorded):"
+    )
+    naive = ["events", "rai", "sitesDetected", "sitesSurveyed", "naiveOccupancy", "detectionRate"]
     typer.echo(summary[naive].to_string(na_rep="–"))
     modelled = summary.dropna(subset=["occupancy"]) if "occupancy" in summary.columns else summary.iloc[0:0]
     if not modelled.empty:
@@ -699,7 +702,10 @@ def ecology_cmd(
         reason = "not identified to species" if not all_taxa else "not identified"
         typer.echo(f"\nLeft out {crops.plural(int(left_out.sum()), 'event')} {reason}: "
                    + ", ".join(f"{name} ({count})" for name, count in left_out.head(8).items()))
-    typer.echo(f"Wrote {out / ecology.SUMMARY_FILE}, {out / ecology.EFFORT_FILE} and {out / ecology.HISTORIES_FOLDER}/")
+    typer.echo(
+        f"Wrote {out / ecology.SUMMARY_FILE}, {out / ecology.RAI_FILE}, {out / ecology.EFFORT_FILE} "
+        f"and {out / ecology.HISTORIES_FOLDER}/"
+    )
     if (out / activity.PLOT_FILE).exists() and "activityPeak" in summary.columns and summary["activityPeak"].notna().any():
         typer.echo(f"Wrote {out / activity.ACTIVITY_FILE}, {out / activity.OVERLAP_FILE} and {out / activity.PLOT_FILE}")
 

@@ -552,21 +552,25 @@ camtraptools ecology my_survey --out my_ecology
 
 The survey is cut into sampling occasions (7 days by default, `--occasion-days`).
 
-**1. Naive occupancy** for every species:
+**1. Records and naive occupancy** for every species:
 
 ```
 20 sites, 12 occasions of 7 days from 2018-10-27, 935 camera days.
 
-Naive occupancy (share of surveyed sites where the taxon was recorded):
-                       events  sitesDetected  sitesSurveyed  naiveOccupancy  detectionRate
+Records and naive occupancy (rai: events per 100 camera-days; naiveOccupancy: share of surveyed sites where the taxon was recorded):
+                       events    rai  sitesDetected  sitesSurveyed  naiveOccupancy  detectionRate
 taxon
-Oryx gazella              170             16             20            0.80           0.50
-Canis mesomelas            37             14             20            0.70           0.26
-Parahyaena brunnea         11              8             20            0.40           0.17
+Oryx gazella              170  18.18             16             20            0.80           0.50
+Canis mesomelas            37   3.96             14             20            0.70           0.26
+Parahyaena brunnea         11   1.18              8             20            0.40           0.17
 ```
 
-`detectionRate` is how often the species was recorded per occasion at the sites where
-it was found. Low values mean it is often missed where it lives.
+- `rai` (relative abundance index): independent events per 100 camera-days. It is the
+  most widely reported camera-trap number and is useful for comparing the same species
+  between sites or years. It is not a density: species differ in how easily cameras
+  record them, so a higher RAI does not mean a species is more numerous than another.
+- `detectionRate` is how often the species was recorded per occasion at the sites
+  where it was found. Low values mean it is often missed where it lives.
 
 **2. The occupancy model**, for species recorded at three or more sites:
 
@@ -605,6 +609,7 @@ The folder `my_ecology/` contains:
 | File | Contents |
 |---|---|
 | `occupancy.csv` | All numbers above, one row per species |
+| `rai.csv` | Relative abundance index per site and species, with a row for all sites |
 | `histories/<species>.csv` | Detection history: sites × occasions, 1 = recorded, 0 = not recorded, empty = camera not running. Ready for other occupancy software such as R's `unmarked` |
 | `effort.csv` | Camera days per site and occasion |
 | `activity.csv`, `activity.svg` | Activity curves and a chart of the six most recorded species |

@@ -24,6 +24,7 @@ DEFAULT_OCCASION_DAYS = 7
 HISTORIES_FOLDER = "histories"
 EFFORT_FILE = "effort.csv"
 SUMMARY_FILE = "occupancy.csv"
+RAI_FILE = "rai.csv"
 LOGIT_LIMITS = (-15.0, 15.0)
 MIN_SITES_FOR_MODEL = 3
 AT_LIMIT = 0.99
@@ -131,6 +132,19 @@ def summarize(histories: dict[str, pd.DataFrame], events: pd.DataFrame) -> pd.Da
             }
         )
     return pd.DataFrame(rows).set_index("taxon").sort_values(["naiveOccupancy", "events"], ascending=False)
+
+
+def relative_abundance(events: pd.DataFrame, effort: pd.DataFrame, taxa: list[str]) -> pd.DataFrame:
+    """Return the relative abundance index (RAI) of each taxon at each site: its
+    independent events per 100 camera-days. Sites are rows and taxa columns, with a
+    last row for all sites together. RAI compares how often species are recorded; it
+    is not a density, because species differ in how easily cameras record them."""
+    camera_days = effort.sum(axis=1)
+    counts = pd.crosstab(events["site"], events["scientificName"]).reindex(index=effort.index, columns=taxa, fill_value=0)
+    rai = counts.div(camera_days.where(camera_days > 0), axis=0) * 100
+    rai.loc["all sites"] = counts.sum() / camera_days.sum() * 100 if camera_days.sum() else float("nan")
+    rai.index.name = "site"
+    return rai.round(2)
 
 
 def sigmoid(value):
@@ -305,7 +319,8 @@ def analyse(
     min_activity_events: int = activity.DEFAULT_MIN_EVENTS,
 ) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
     """Write a detection history per taxon in ``out_dir/histories/``, the sampling
-    effort in ``effort.csv`` and, in ``occupancy.csv``, naive occupancy and the
+    effort in ``effort.csv``, the relative abundance index per site in ``rai.csv`` and,
+    in ``occupancy.csv``, each taxon's events and RAI, naive occupancy and the
     occupancy model's estimates for taxa recorded at three or more sites. Taxa with at
     least ``min_activity_events`` events also get an activity curve, a peak hour and
     their overlap with each other (see ``activity.run``).
@@ -330,7 +345,10 @@ def analyse(
         history.to_csv(out_dir / HISTORIES_FOLDER / file_name(name))
     effort.to_csv(out_dir / EFFORT_FILE)
     summary = summarize(histories, events) if histories else pd.DataFrame()
+    rai = relative_abundance(named[named["scientificName"].isin(chosen)], effort, chosen)
+    rai.to_csv(out_dir / RAI_FILE)
     if histories:
+        summary.insert(1, "rai", rai.loc["all sites"].reindex(summary.index))
         summary = summary.join(occupancy_models(histories, effort, occasion_days))
     peaks, overlaps = activity.run(named[named["scientificName"].isin(chosen)], out_dir, min_activity_events)
     if histories:
