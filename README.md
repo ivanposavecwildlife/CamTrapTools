@@ -6,6 +6,8 @@
 ![status: alpha](https://img.shields.io/badge/status-alpha-orange)
 ![python: 3.11–3.14](https://img.shields.io/badge/python-3.11%E2%80%933.14-blue)
 ![license: MIT](https://img.shields.io/badge/license-MIT-blue)
+[![PyPI](https://img.shields.io/pypi/v/camtraptools)](https://pypi.org/project/camtraptools/)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23500635.svg)](https://doi.org/10.5281/zenodo.23500635)
 
 Camera traps are one of the main ways conservationists monitor wildlife, but a single
 project can produce millions of images. Field teams routinely lose months of data to
@@ -126,11 +128,16 @@ flash (`cam_noflash`) and clock errors.*
 New to CamTrapTools? The [user guide](https://github.com/ivanposavecwildlife/CamTrapTools/blob/main/docs/user-guide.md) walks through a whole survey
 step by step, with the output of every command.
 
-Requires [uv](https://docs.astral.sh/uv/). The `detect` extra installs SpeciesNet and
-PyTorch (about 1 GB); leave it out if you only need the quality checks.
+Install from [PyPI](https://pypi.org/project/camtraptools/) with
+[uv](https://docs.astral.sh/uv/) (recommended) or pip. The `detect` extra installs
+SpeciesNet and PyTorch (about 1 GB); leave it out if you only need the quality checks.
 
 ```bash
-uv tool install "camtraptools[detect] @ git+https://github.com/ivanposavecwildlife/CamTrapTools"
+uv tool install "camtraptools[detect]"
+```
+
+```bash
+pip install "camtraptools[detect]"
 ```
 
 ```bash
@@ -256,6 +263,10 @@ without the `detect` extra: tests use stand-ins for SpeciesNet, so CI never down
 the models. Tests for `adapt` need PyTorch and run when the extra is installed.
 
 ## License
+
+If you use CamTrapTools in your work, please cite it using the DOI
+[10.5281/zenodo.23500635](https://doi.org/10.5281/zenodo.23500635) or GitHub's "Cite this
+repository" button.
 
 [MIT](https://github.com/ivanposavecwildlife/CamTrapTools/blob/main/LICENSE). The optional `detect` extra installs
 [SpeciesNet](https://github.com/google/cameratrapai) (Apache-2.0), whose MegaDetector

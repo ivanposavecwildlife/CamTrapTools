@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Installation from PyPI (`uv tool install "camtraptools[detect]"` or `pip install
+  "camtraptools[detect]"`) in the README and user guide, with PyPI and DOI badges and a
+  citation note; `CITATION.cff` includes the Zenodo DOI.
+
 ## [0.6.0] - 2026-10-20
 
 Ready for real surveys: large surveys and interrupted runs, other folder layouts,

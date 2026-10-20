@@ -88,12 +88,13 @@ is recorded where it is known to be.
 
 ## 3. Install
 
-CamTrapTools needs [uv](https://docs.astral.sh/uv/getting-started/installation/), a
-small program that installs Python tools. Install uv, then open a new terminal and run
-one of these:
+CamTrapTools is on [PyPI](https://pypi.org/project/camtraptools/). The easiest way to
+install it is with [uv](https://docs.astral.sh/uv/getting-started/installation/), a
+small program that installs Python tools in their own environment. Install uv, then
+open a new terminal and run:
 
 ```bash
-uv tool install "camtraptools[detect] @ git+https://github.com/ivanposavecwildlife/CamTrapTools"
+uv tool install "camtraptools[detect]"
 ```
 
 This installs everything, including SpeciesNet and PyTorch (about 1 GB). If you only
@@ -101,8 +102,11 @@ need quality checks, or you already have AI results from another tool, the small
 install is enough:
 
 ```bash
-uv tool install "camtraptools @ git+https://github.com/ivanposavecwildlife/CamTrapTools"
+uv tool install camtraptools
 ```
+
+If you already use Python, `pip install "camtraptools[detect]"` works too, preferably
+in a virtual environment.
 
 Check that it works:
 
@@ -111,13 +115,13 @@ camtraptools --version
 ```
 
 ```
-CamTrapTools 0.5.0
+CamTrapTools 0.6.0
 ```
 
 `camtraptools --help` lists all commands, and `camtraptools COMMAND --help` explains
 one command and its options.
 
-**Updating.** Run `uv tool upgrade camtraptools`.
+**Updating.** Run `uv tool upgrade camtraptools` (or `pip install --upgrade camtraptools`).
 
 **Computer.** Any recent laptop works. SpeciesNet uses an NVIDIA graphics card or an
 Apple Silicon Mac's GPU when there is one; on an Apple M4, 2,300 images take about 20
@@ -777,7 +781,7 @@ original answer next to yours.
 
 | Problem | Solution |
 |---|---|
-| `camtraptools: command not found` | Open a new terminal after installing uv and CamTrapTools; check with `uv tool list` |
+| `camtraptools: command not found` | Open a new terminal after installing uv and CamTrapTools; check with `uv tool list` (with pip, activate the virtual environment you installed it in) |
 | `Detection needs the optional 'detect' extra` | Install with `camtraptools[detect]` as in [Install](#3-install) |
 | `no media.csv` or `no observations.csv` | Run the earlier steps first, on the same package folder |
 | `--images is required to run SpeciesNet` | Pass the SD-card folder that you gave `ingest` |

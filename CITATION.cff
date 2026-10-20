@@ -5,6 +5,7 @@ type: software
 authors:
   - family-names: Posavec
     given-names: Ivan
+doi: "10.5281/zenodo.23500635"
 repository-code: "https://github.com/ivanposavecwildlife/CamTrapTools"
 url: "https://github.com/ivanposavecwildlife/CamTrapTools"
 license: MIT
