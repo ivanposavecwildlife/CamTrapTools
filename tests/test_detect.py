@@ -273,3 +273,16 @@ def test_saved_progress_from_other_settings_is_discarded(make_image, monkeypatch
 
     assert detect.saved_progress(tmp_path / "package", other) == 0
     assert not (tmp_path / "package" / detect.PARTIAL_FILE).exists()
+
+
+def test_saved_progress_counts_only_finished_images(make_image, tmp_path):
+    make_image("images/camera_A/IMG_0001.JPG", date_time_original="2024:03:01 06:00:00")
+    ingest(tmp_path / "images", tmp_path / "package")
+    media = pd.read_csv(tmp_path / "package" / "media.csv")
+    settings = detect.run_settings(media, tmp_path / "images", detect.DEFAULT_MODEL, None, None)
+    (tmp_path / "package" / detect.PARTIAL_SETTINGS_FILE).write_text(json.dumps(settings))
+    (tmp_path / "package" / detect.PARTIAL_FILE).write_text(
+        json.dumps({"predictions": [{"filepath": "a", "detections": []}, {"filepath": "b", "failures": ["DETECTOR"]}]})
+    )
+
+    assert detect.saved_progress(tmp_path / "package", settings) == 1

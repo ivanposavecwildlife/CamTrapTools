@@ -83,7 +83,9 @@ def best_frame(frames: list[dict]) -> dict | None:
 
 def saved_progress(package_dir: Path, settings: dict) -> int:
     """Return how many images an interrupted SpeciesNet run with the same settings has
-    already saved, after deleting saved progress from a run with other settings."""
+    already finished, after deleting saved progress from a run with other settings.
+    SpeciesNet's saved progress also lists images it has not reached yet, marked as
+    failures; those are processed again, so they are not counted."""
     partial = package_dir / PARTIAL_FILE
     settings_file = package_dir / PARTIAL_SETTINGS_FILE
     if not partial.exists():
@@ -93,7 +95,8 @@ def saved_progress(package_dir: Path, settings: dict) -> int:
         settings_file.unlink(missing_ok=True)
         return 0
     try:
-        return len(json.loads(partial.read_text(encoding="utf-8")).get("predictions", []))
+        saved = json.loads(partial.read_text(encoding="utf-8")).get("predictions", [])
+        return sum(1 for prediction in saved if "failures" not in prediction)
     except json.JSONDecodeError:
         partial.unlink()
         return 0

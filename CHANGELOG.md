@@ -21,6 +21,9 @@ All notable changes to this project are documented here. The format follows
   brocket), and a species is preferred when a name is also a genus (`puma`: *Puma
   concolor*). A plain `unknown` label counts as not labelled.
 
+- When `detect` continues an interrupted run, it counts only images SpeciesNet has
+  finished; its saved progress also lists images not reached yet, which are processed
+  again.
 - CI no longer runs on macOS: GitHub's Apple Silicon runners were often unavailable and
   the job was cancelled without running. The full test suite runs on macOS before each
   release.
