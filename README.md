@@ -79,12 +79,13 @@ flash (`cam_noflash`) and clock errors.*
   ![Review app showing a camera event with the AI's boxes and a human correction](https://raw.githubusercontent.com/ivanposavecwildlife/CamTrapTools/main/docs/review.jpg)
 
 - **`labels`**: imports labels you already have, from Timelapse, Wildlife Insights,
-  another Camtrap DP package or any spreadsheet, as a truth file for `evaluate`, `crops`
-  and `compare`. It matches images even when paths differ and turns common names into
-  scientific names.
-- **`evaluate`**: measures the AI against your reviews or a file of true labels:
-  precision and recall per species, the confidence above which each species' answers
-  can be trusted, and an HTML report of every mistake with its images.
+  another Camtrap DP package, a COCO Camera Traps file (as published with LILA BC
+  datasets) or any spreadsheet, as a truth file for `evaluate`, `crops` and `compare`.
+  It matches images even when paths differ and turns common names into scientific names.
+- **`evaluate`**: measures the AI against your reviews or a file of true labels: each
+  event is correct, correct only above species level, more specific than the reference,
+  or wrong; precision and recall per species, the confidence above which each species'
+  answers can be trusted, and an HTML report of every mistake with its images.
 - **`crops`**: cuts every labelled animal detection into a training dataset for
   fine-tuning a classifier (`train/`, `val/`, `test/`, one folder per species). Whole
   camera locations go to one split, so the model is tested on backgrounds it has never
@@ -271,6 +272,10 @@ SD card ─► ingest/check ─► detect/events ─► review ─► ecology �
 | Review | `review`, `review-stats` | Local web app for checking AI labels, least confident first; review statistics | ✅ v0.3.0 |
 | Evaluation | `evaluate`, `crops`, `adapt` | Per-species accuracy and confidence thresholds; training data and regional fine-tuning | ✅ v0.4.0 |
 | Ecology | `ecology`, `compare` | Occupancy and activity analysis, and how sensitive results are to AI errors | ✅ v0.5.0 |
+| Real surveys | `labels`, `ingest`, `detect`, `ecology` | Surveys of 100,000+ images with resumable runs, nested folders, clock correction, importing existing labels, relative abundance index, installation from PyPI | ✅ v0.6.0 |
+| Partner deliverables | `summary`, `ecology`, `export`, `ingest --videos` | One-page survey summary, species richness, occupancy with site covariates, privacy on export, videos | ✅ v0.7.0 |
+| Second validation | `labels`, `evaluate` | Orinoquía (Colombia): COCO Camera Traps labels, flexible name matching, "more specific" outcome, Intel Mac support | ✅ v0.7.1 |
+| Partner surveys | all | Run on real surveys from parks, researchers and NGOs, improve what their data shows, publish to GBIF with their permission | Ongoing |
 
 ## Development
 

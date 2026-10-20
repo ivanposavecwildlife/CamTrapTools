@@ -486,6 +486,7 @@ tool, see [Already have labels?](#already-have-labels) below.
 Compared 60 events with labels in truth.csv.
   correct: 48 (80%)
   not to species: 10 (17%)
+  more specific: 0 (0%)
   unverified: 0 (0%)
   wrong: 2 (3%)
 ```
