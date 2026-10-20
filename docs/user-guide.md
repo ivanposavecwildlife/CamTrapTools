@@ -19,14 +19,15 @@ Windows), your images, and about an hour for a first survey.
 7. [Step 3: find and identify animals (`detect` or `import`)](#step-3-find-and-identify-animals-detect-or-import)
 8. [Step 4: group images into visits (`events`)](#step-4-group-images-into-visits-events)
 9. [Step 5: review the AI (`review`, `review-stats`)](#step-5-review-the-ai-review-review-stats)
-10. [Step 6: measure the AI (`evaluate`)](#step-6-measure-the-ai-evaluate)
+10. [Step 6: measure the AI (`evaluate`, `labels`)](#step-6-measure-the-ai-evaluate-labels)
 11. [Step 7: adapt the AI to your region (`crops`, `adapt`)](#step-7-adapt-the-ai-to-your-region-crops-adapt)
-12. [Step 8: ecological results (`ecology`, `compare`)](#step-8-ecological-results-ecology-compare)
+12. [Step 8: ecological results (`ecology`, `summary`, `compare`)](#step-8-ecological-results-ecology-summary-compare)
 13. [Step 9: publish (`export`)](#step-9-publish-export)
 14. [Choosing a workflow](#choosing-a-workflow)
 15. [Files in a package](#files-in-a-package)
 16. [Troubleshooting](#troubleshooting)
 17. [Command reference](#command-reference)
+18. [Try it on real data](#try-it-on-real-data)
 
 ---
 
@@ -40,14 +41,15 @@ SD cards ─► ingest ─► check / report ─► detect (or import) ─► ev
 
 | Stage | Command | What you get |
 |---|---|---|
-| Organise | `ingest` | A standard data package listing every image and camera |
+| Organise | `ingest` | A standard data package listing every image (and video) and camera |
 | Quality control | `check`, `report` | Dead batteries, fallen cameras, wrong clocks, broken flashes, as a list and a shareable HTML report |
 | AI | `detect` or `import` | Animals, people and vehicles found and identified in every image |
 | Visits | `events` | Images grouped into independent visits, with a species and count for each |
 | Human check | `review`, `review-stats` | A browser app to confirm or correct the AI, least confident decisions first |
-| Accuracy | `evaluate` | How often the AI is right per species, which confidence to trust, and a report of its mistakes |
+| Accuracy | `labels`, `evaluate` | Your existing labels imported; how often the AI is right per species, which confidence to trust, and a report of its mistakes |
 | Regional AI | `crops`, `adapt` | A version of the AI fitted to your area's species and cameras |
-| Ecology | `ecology`, `compare` | Occupancy, daily activity, overlap between species, and how much AI mistakes change them |
+| Ecology | `ecology`, `compare` | Relative abundance, occupancy (also with site covariates), daily activity and overlap, species richness, and how much AI mistakes change them |
+| Results | `summary` | One HTML page of the results to hand back to a project |
 | Publish | `export` | A validated Camtrap DP package for GBIF |
 
 Everything runs on your own computer. Images never leave it, and the review app is
@@ -77,6 +79,9 @@ not wrong.
 **Event (independent visit).** A burst of images of the same animal is one visit, not
 twenty. Images at a camera belong to the same event until there is a gap of more than
 30 minutes. Ecological analyses count events, not images.
+
+**Camera-day.** One camera running for one day: the unit of sampling effort. Twenty
+cameras running for 30 days are 600 camera-days.
 
 **Geofencing.** Telling SpeciesNet the country (`--country ZAF`) stops it from naming
 species that do not live there.
@@ -115,7 +120,7 @@ camtraptools --version
 ```
 
 ```
-CamTrapTools 0.6.0
+CamTrapTools 0.7.0
 ```
 
 `camtraptools --help` lists all commands, and `camtraptools COMMAND --help` explains
@@ -276,13 +281,13 @@ For a survey with problems:
 
 ```
 cam_future: 1.7 days, 5 images, longest gap 0.4 days
-  ! 5 image(s) dated in the future; the camera clock was set wrongly
+  ! 5 image(s) dated in the future; the camera clock was set wrongly (correct it with cameraTime and actualTime in the field sheet)
 cam_gap: 40.0 days, 6 images, longest gap 32.0 days
   ! no images for 32.0 days (2024-03-05 to 2024-04-06); check for a camera fault
 cam_noflash: 19.2 days, 60 images, longest gap 0.8 days
   ! none of 60 images were taken at night; check the infrared flash
 cam_reset: 8828.7 days, 10 images, longest gap 8825.1 days
-  ! 4 image(s) dated before 2010; the camera clock was probably reset
+  ! 4 image(s) dated before 2010; the camera clock was probably reset (correct it with cameraTime and actualTime in the field sheet)
   ! clock went back 8828 days 17:55:00 at IMG_0007.JPG
 cam_vegetation: 3.5 days, 406 images, longest gap 0.8 days
   ! 1 day(s) with more than 100 images (most: 400 on 2024-03-04); often vegetation moving in front of the lens or sun glare
@@ -325,6 +330,7 @@ camtraptools detect my_survey --images sd_cards --country ZAF
   state with `--admin1-region CA`.
 
 ```
+Running SpeciesNet on 194 files; progress is saved every 10 minutes.
 Images with detections at confidence 0.2 or higher:
               images  animal  human  vehicle  empty
 deploymentID
@@ -349,7 +355,7 @@ survey can take many hours. Progress is saved every 10 minutes. If the run stops
 laptop sleeps, the terminal closes), run the same command again and it continues:
 
 ```
-Continuing an interrupted run: 41250 of 100000 images already done.
+Continuing an interrupted run: 41250 of 100000 files already done.
 ```
 
 On a Mac, `caffeinate -i camtraptools detect …` keeps the computer awake during the
@@ -424,8 +430,8 @@ filled in with that decision.
 Events are shown **least confident first**. On a Kgalagadi sample, every event the AI
 did not get exactly right was among the least confident 22%. On the full season,
 reviewing the least confident 20% of events recovered all but one of the species the
-AI had missed, and more than half of the species-at-site records. You rarely need to review everything. Use `--order time` to go through events
-in time order instead.
+AI had missed, and more than half of the species-at-site records. You rarely need to
+review everything. Use `--order time` to go through events in time order instead.
 
 Stop the app with Ctrl+C. Decisions are saved as you go, in `reviews.csv`, and added
 to `observations.csv` as human observations next to the machine's. Every later step
@@ -454,7 +460,7 @@ Agreeing with the AI every time, in a few seconds per decision, is a warning sig
 **automation bias**: trusting the pre-filled answer instead of looking. Slow down on
 the low-confidence events, where the AI is most often wrong.
 
-## Step 6: measure the AI (`evaluate`)
+## Step 6: measure the AI (`evaluate`, `labels`)
 
 `evaluate` compares the AI with a reference: your reviews, or a file of correct labels
 (for example from an earlier manual classification).
@@ -473,7 +479,36 @@ A02/A02_R1/IMG_0007.JPG,Oryx gazella,Oryx,Bovidae,Artiodactyla,Mammalia
 A02/A02_R1/IMG_0012.JPG,,,,,
 ```
 
-Without `--truth`, your reviews are the reference.
+Without `--truth`, your reviews are the reference. If your labels come from another
+tool, see [Already have labels?](#already-have-labels) below.
+
+```
+Compared 60 events with labels in truth.csv.
+  correct: 48 (80%)
+  not to species: 10 (17%)
+  unverified: 0 (0%)
+  wrong: 2 (3%)
+```
+
+| Outcome | Meaning |
+|---|---|
+| correct | Same label as the reference |
+| not to species | A correct higher taxon, such as *Bovidae* for a gemsbok |
+| unverified | A higher taxon, but the truth file has no ancestry to check it |
+| wrong | A different label |
+
+The output continues with:
+
+- **Per label:** precision (when the AI says this species, how often it is right) and
+  recall (of the events of this species, how many the AI found).
+- **Confidence thresholds:** for each label, the lowest confidence at which 95% of its
+  answers are right (`--target-precision 0.9` to change). Answers above it can be
+  trusted; review the rest. "never" means no confidence was precise enough. ⚠ marks
+  labels with fewer than ten answers.
+- **Every event that was not correct.**
+
+`mistakes.html` shows each of these events with its images and boxes. The table is
+also saved as `evaluation.csv` in the package.
 
 ### Already have labels?
 
@@ -512,34 +547,6 @@ Images per label:
   columns.
 - Labels such as "Empty", "Blank" or "Nothing" mean an empty image; rows with no label
   are treated as not yet labelled and left out.
-
-```
-Compared 60 events with labels in truth.csv.
-  correct: 48 (80%)
-  not to species: 10 (17%)
-  unverified: 0 (0%)
-  wrong: 2 (3%)
-```
-
-| Outcome | Meaning |
-|---|---|
-| correct | Same label as the reference |
-| not to species | A correct higher taxon, such as *Bovidae* for a gemsbok |
-| unverified | A higher taxon, but the truth file has no ancestry to check it |
-| wrong | A different label |
-
-The output continues with:
-
-- **Per label:** precision (when the AI says this species, how often it is right) and
-  recall (of the events of this species, how many the AI found).
-- **Confidence thresholds:** for each label, the lowest confidence at which 95% of its
-  answers are right (`--target-precision 0.9` to change). Answers above it can be
-  trusted; review the rest. "never" means no confidence was precise enough. ⚠ marks
-  labels with fewer than ten answers.
-- **Every event that was not correct.**
-
-`mistakes.html` shows each of these events with its images and boxes. The table is
-also saved as `evaluation.csv` in the package.
 
 ## Step 7: adapt the AI to your region (`crops`, `adapt`)
 
@@ -619,7 +626,7 @@ camtraptools evaluate my_survey --truth labels.csv --deployment A05 --deployment
 
 On the Kgalagadi test cameras, correct events rose from 69% to 88%, mostly at night.
 
-## Step 8: ecological results (`ecology`, `compare`)
+## Step 8: ecological results (`ecology`, `summary`, `compare`)
 
 ### Occupancy and activity
 
@@ -741,10 +748,25 @@ The folder `my_ecology/` contains:
 | `activity.csv`, `activity.svg` | Activity curves and a chart of the six most recorded species |
 | `overlap.csv` | Overlap between every pair of species |
 | `richness.csv`, `richness.svg` | Species accumulation curve (expected species per number of camera-days) and its chart with the Chao2 estimate |
+| `occupancy_covariates.csv` | Every covariate model and its coefficients, when covariates are given |
 
 By default only species are analysed; events identified only to a higher taxon are
 listed as left out. Use `--all-taxa` to include them or `--taxon "Vulpes chama"` to
 choose species.
+
+### Share the results
+
+```bash
+camtraptools summary my_survey --out summary.html --title "Kgalagadi camera-trap survey 2024"
+```
+
+`summary.html` is one page to hand back to a project or partner: the survey's key
+numbers, camera problems with the timeline, a table of species with their events,
+relative abundance index, sites, naive and modelled occupancy and busiest time of day,
+the daily activity chart with overlaps, species richness with the accumulation curve,
+how the species were identified (AI, adapted layer, how many events a person
+reviewed, and accuracy if `evaluate` was run), and the methods and their limits in
+plain language. It works offline, in light and dark mode, and on a phone.
 
 ### How much do AI mistakes change the results?
 
@@ -770,20 +792,6 @@ It then lists the sites per species, modelled occupancy, activity and overlap si
 side for each source. On the Kgalagadi survey, the AI alone missed brown hyena, Cape
 fox and African wildcat entirely; this is the kind of mistake `compare` makes visible
 before it reaches a report.
-
-### Share the results
-
-```bash
-camtraptools summary my_survey --out summary.html --title "Kgalagadi camera-trap survey 2024"
-```
-
-`summary.html` is one page to hand back to a project or partner: the survey's key
-numbers, camera problems with the timeline, a table of species with their events,
-relative abundance index, sites, naive and modelled occupancy and busiest time of day,
-the daily activity chart with overlaps, species richness with the accumulation curve,
-how the species were identified (AI, adapted layer, how many events a person
-reviewed, and accuracy if `evaluate` was run), and the methods and their limits in
-plain language. It works offline, in light and dark mode, and on a phone.
 
 ## Step 9: publish (`export`)
 
@@ -849,8 +857,14 @@ camtraptools detect survey --images sd_cards --country ZAF
 camtraptools events survey
 camtraptools review survey --images sd_cards --reviewer "Your Name"   # least confident 20% or more
 camtraptools ecology survey --out ecology
-camtraptools export survey --out publish --title "…" --contributor "…" --timezone Africa/Johannesburg
+camtraptools summary survey --out summary.html --title "…"
+camtraptools export survey --out publish --title "…" --contributor "…" --timezone Africa/Johannesburg --exclude-humans
 ```
+
+Cameras that record video: add `--videos` to `ingest`.
+
+**Images already labelled by people** (for example in Timelapse): import the labels
+with `labels`, then `evaluate` the AI against them before trusting it on new surveys.
 
 **Images already processed by another tool:** replace `detect` with
 `camtraptools import survey results.json`.
@@ -865,10 +879,12 @@ results.
 | File | Written by | Contents |
 |---|---|---|
 | `deployments.csv` | `ingest` | One row per camera: ID, period, location and field-sheet columns |
-| `media.csv` | `ingest` | One row per image: path, time, deployment |
+| `media.csv` | `ingest` | One row per image or video: path, time, deployment, type |
 | `speciesnet.json` | `detect`, `import` | The AI's raw results |
 | `observations.csv` | `detect`, `import`, `events`, `review` | Media-level observations (one per detection or empty image) and event-level observations (one per visit), machine and human |
 | `adapted.csv` | `detect --adapted` | The adapted layer's answer for each animal detection |
+| `frames/` | `detect` | Frames sampled from videos |
+| `speciesnet.partial.json` | `detect` | Progress of an unfinished run; removed when it finishes |
 | `reviews.csv` | `review` | Your decisions, with reviewer and time |
 | `evaluation.csv` | `evaluate` | Per-event comparison with the reference |
 
@@ -892,6 +908,8 @@ original answer next to yours.
 | Images missing from `media.csv` | Only `.jpg`/`.jpeg` files are read (and videos with `--videos`), and hidden files (starting with `.`) are skipped; `ingest` reports what it skipped |
 | `ingest` finds one deployment per site instead of per camera | Your cards are organised in more levels; use `--folder-depth 2` |
 | `detect` stopped halfway | Run the same command again; it continues from the last save |
+| Videos have the wrong time | The camera stored no recording time and the file date was used; copy cards so file dates are kept, or correct the clock with `cameraTime` and `actualTime` |
+| `labels` reports names it does not recognise | Run `detect` once so SpeciesNet's taxonomy is available, or map the names with `--names` |
 
 ## Command reference
 
