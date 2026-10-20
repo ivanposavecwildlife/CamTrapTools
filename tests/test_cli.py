@@ -594,6 +594,7 @@ def test_ecology_command_reports_naive_occupancy(tmp_path):
     assert "2 sites, 3 occasions of 7 days from 2024-03-01, 17 camera days." in result.output
     assert "No events of: Lynx lynx" in result.output
     assert "rai: events per 100 camera-days" in result.output
+    assert "Species richness: 1 species recorded in 17 camera-days" in result.output
     assert "Vulpes chama" in result.output
 
 

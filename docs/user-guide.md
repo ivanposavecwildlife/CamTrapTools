@@ -662,6 +662,20 @@ Activity overlap (0 = never active at the same time, 1 = identical), with 95% in
   Oryx gazella & Canis mesomelas: 0.68 (0.51–0.75, Δ1)
 ```
 
+**4. Species richness**: how many species the survey found, and how many it likely
+missed:
+
+```
+Species richness: 25 species recorded in 935 camera-days; Chao2 estimates 37.2 (27.2–93.1), so the survey found about 67% of the species there.
+  7 species recorded on only one camera-day and 2 on two; many such rare records mean more species are likely still unrecorded.
+```
+
+`richness.svg` shows the species accumulation curve: the expected number of species
+found as camera-days increase. If the curve is still rising at the end, as here,
+more effort would find more species. The Chao2 estimate uses the species recorded on
+only one or two camera-days; with many of them the estimate is uncertain, which the
+wide interval shows.
+
 The folder `my_ecology/` contains:
 
 | File | Contents |
@@ -672,6 +686,7 @@ The folder `my_ecology/` contains:
 | `effort.csv` | Camera days per site and occasion |
 | `activity.csv`, `activity.svg` | Activity curves and a chart of the six most recorded species |
 | `overlap.csv` | Overlap between every pair of species |
+| `richness.csv`, `richness.svg` | Species accumulation curve (expected species per number of camera-days) and its chart with the Chao2 estimate |
 
 By default only species are analysed; events identified only to a higher taxon are
 listed as left out. Use `--all-taxa` to include them or `--taxon "Vulpes chama"` to

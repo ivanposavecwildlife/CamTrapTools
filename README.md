@@ -109,7 +109,9 @@ flash (`cam_noflash`) and clock errors.*
   too rare for a reliable estimate. For species with 20 or more events it also draws
   daily activity curves (circular kernel densities, as in the R package `overlap`),
   reports each species' busiest time of day and the overlap coefficient between every
-  pair of species with a 95% bootstrap interval, and saves the curves as a chart.
+  pair of species with a 95% bootstrap interval, and saves the curves as a chart. A
+  species accumulation curve and the Chao2 estimate show how many species the survey
+  likely missed.
   Reviewed decisions replace the AI's, and higher taxa are left out unless asked for
   (`--all-taxa`, `--taxon`).
 - **`compare`**: runs the ecology analyses on several labellings of the same survey

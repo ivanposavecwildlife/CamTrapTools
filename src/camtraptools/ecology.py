@@ -15,7 +15,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from camtraptools import activity
+from camtraptools import activity, richness
 from camtraptools.crops import location_of
 from camtraptools.detect import OBSERVATIONS_FILE
 from camtraptools.reviews import prefer_human
@@ -323,7 +323,9 @@ def analyse(
     in ``occupancy.csv``, each taxon's events and RAI, naive occupancy and the
     occupancy model's estimates for taxa recorded at three or more sites. Taxa with at
     least ``min_activity_events`` events also get an activity curve, a peak hour and
-    their overlap with each other (see ``activity.run``).
+    their overlap with each other (see ``activity.run``). The species accumulation
+    curve and the Chao2 estimate of richness are written too (see ``richness.run``)
+    and returned in ``summary.attrs["richness"]``.
 
     ``events`` comes from ``animal_events``. By default every species is included;
     ``all_taxa`` adds higher taxa such as ``Bovidae``, and ``taxa`` chooses taxa by
@@ -350,10 +352,13 @@ def analyse(
     if histories:
         summary.insert(1, "rai", rai.loc["all sites"].reindex(summary.index))
         summary = summary.join(occupancy_models(histories, effort, occasion_days))
-    peaks, overlaps = activity.run(named[named["scientificName"].isin(chosen)], out_dir, min_activity_events)
+    species_events = named[named["scientificName"].isin(chosen)]
+    peaks, overlaps = activity.run(species_events, out_dir, min_activity_events)
+    estimate = richness.run(species_events, int(effort.to_numpy().sum()), out_dir)
     if histories:
         summary = summary.join(peaks[["peak"]].rename(columns={"peak": "activityPeak"}))
     summary.to_csv(out_dir / SUMMARY_FILE)
+    summary.attrs["richness"] = estimate
     return summary, left_out.value_counts(), overlaps
 
 

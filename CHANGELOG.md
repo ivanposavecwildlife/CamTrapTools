@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Species richness in `ecology`: the species accumulation curve over camera-days by
+  exact rarefaction (`richness.csv`, chart in `richness.svg`) and the Chao2 estimate of
+  total species richness with a 95% log-normal interval and survey completeness, from
+  species recorded on only one or two camera-days.
 - Privacy in `export`: `--exclude-humans` leaves out images of people (with a human
   observation, or in an event decided as human) and their observations, and `export`
   warns when people are present without it; `--coordinate-decimals` rounds every

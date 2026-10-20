@@ -24,6 +24,7 @@ from camtraptools import (
     labels,
     report,
     review,
+    richness,
 )
 
 app = typer.Typer(
@@ -720,13 +721,14 @@ def ecology_cmd(
             "missedAtOccupiedSite: chance of never recording it over the survey."
         )
     report_activity(summary, overlaps, min_activity_events)
+    report_richness(summary.attrs.get("richness"))
     if not left_out.empty and not taxon:
         reason = "not identified to species" if not all_taxa else "not identified"
         typer.echo(f"\nLeft out {crops.plural(int(left_out.sum()), 'event')} {reason}: "
                    + ", ".join(f"{name} ({count})" for name, count in left_out.head(8).items()))
     typer.echo(
-        f"Wrote {out / ecology.SUMMARY_FILE}, {out / ecology.RAI_FILE}, {out / ecology.EFFORT_FILE} "
-        f"and {out / ecology.HISTORIES_FOLDER}/"
+        f"Wrote {out / ecology.SUMMARY_FILE}, {out / ecology.RAI_FILE}, {out / ecology.EFFORT_FILE}, "
+        f"{out / richness.RICHNESS_FILE}, {out / richness.PLOT_FILE} and {out / ecology.HISTORIES_FOLDER}/"
     )
     if (out / activity.PLOT_FILE).exists() and "activityPeak" in summary.columns and summary["activityPeak"].notna().any():
         typer.echo(f"Wrote {out / activity.ACTIVITY_FILE}, {out / activity.OVERLAP_FILE} and {out / activity.PLOT_FILE}")
@@ -904,3 +906,18 @@ def labels_cmd(
             "Map them with --names (columns label, scientificName)."
         )
     typer.echo(f"\nWrote {out}; use it with --truth in evaluate, crops and compare.")
+
+
+def report_richness(estimate: dict | None) -> None:
+    """Print how many species the survey found and the Chao2 estimate of the total."""
+    if not estimate:
+        return
+    typer.echo(
+        f"\nSpecies richness: {estimate['observedSpecies']} species recorded in {estimate['cameraDays']} camera-days; "
+        f"Chao2 estimates {estimate['estimatedSpecies']:g} ({estimate['estimatedLower']:g}–{estimate['estimatedUpper']:g}), "
+        f"so the survey found about {estimate['completeness']:.0%} of the species there."
+    )
+    typer.echo(
+        f"  {estimate['uniques']} species recorded on only one camera-day and "
+        f"{estimate['duplicates']} on two; many such rare records mean more species are likely still unrecorded."
+    )
