@@ -36,8 +36,14 @@ All notable changes to this project are documented here. The format follows
   every step from `ingest` to `export` with example output and how to read it, choosing
   a workflow, the files in a package, troubleshooting and a command reference.
 
+- Packaging for PyPI: project links, keywords and classifiers, a workflow that
+  publishes to PyPI with trusted publishing when a GitHub release is published, and a
+  `CITATION.cff` file for citing the toolkit.
+
 ### Changed
 
+- The README's images and links are absolute, so they also work on PyPI.
+- The message for a missing `detect` extra gives the `pip` command as well.
 - `events` summarises all events at once: 100,000 images now take about a second
   instead of more than ten minutes, with identical results.
 - Activity curves of species with many events are computed from one-minute bins with

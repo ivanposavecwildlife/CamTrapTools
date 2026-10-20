@@ -16,6 +16,7 @@ import pandas as pd
 DEFAULT_MODEL = "kaggle:google/speciesnet/pyTorch/v4.0.3a/1"
 DEFAULT_THRESHOLD = 0.2
 RESULTS_FILE = "speciesnet.json"
+INSTALL_DETECT = 'Install it with: pip install "camtraptools[detect]" (or uv sync --extra detect in a clone of the repository)'
 CATEGORIES = ["animal", "human", "vehicle"]
 SPECIAL_LABELS = {"animal": "animal", "blank": "blank", "human": "human", "vehicle": "vehicle", "no cv result": "unknown"}
 
@@ -73,7 +74,7 @@ def run(
         from speciesnet import SpeciesNet
     except ImportError as error:
         raise RuntimeError(
-            "Detection needs the optional 'detect' extra. Install it with: uv sync --extra detect"
+            f"Detection needs the optional 'detect' extra. {INSTALL_DETECT}"
         ) from error
     media = pd.read_csv(package_dir / "media.csv")
     settings = run_settings(media, images_dir, model, country, admin1_region)

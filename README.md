@@ -25,7 +25,7 @@ SD cards ─► ingest ─► check / report ─► detect (or import) ─► ev
                                              └── evaluate / crops / adapt ┘
 ```
 
-![Camera health report showing a timeline per camera with highlighted gaps](docs/report.png)
+![Camera health report showing a timeline per camera with highlighted gaps](https://raw.githubusercontent.com/ivanposavecwildlife/CamTrapTools/main/docs/report.png)
 
 *Health report for eight simulated cameras: a dead battery (`cam_dead`), a camera knocked
 over for a month (`cam_gap`), wind-triggered images (`cam_vegetation`), a broken infrared
@@ -72,7 +72,7 @@ flash (`cam_noflash`) and clock errors.*
   next to the machine's, and `review-stats` reports agreement with the AI, corrections
   by confidence and review speed.
 
-  ![Review app showing a camera event with the AI's boxes and a human correction](docs/review.jpg)
+  ![Review app showing a camera event with the AI's boxes and a human correction](https://raw.githubusercontent.com/ivanposavecwildlife/CamTrapTools/main/docs/review.jpg)
 
 - **`labels`**: imports labels you already have, from Timelapse, Wildlife Insights,
   another Camtrap DP package or any spreadsheet, as a truth file for `evaluate`, `crops`
@@ -123,7 +123,7 @@ flash (`cam_noflash`) and clock errors.*
 
 ## Quick start
 
-New to CamTrapTools? The [user guide](docs/user-guide.md) walks through a whole survey
+New to CamTrapTools? The [user guide](https://github.com/ivanposavecwildlife/CamTrapTools/blob/main/docs/user-guide.md) walks through a whole survey
 step by step, with the output of every command.
 
 Requires [uv](https://docs.astral.sh/uv/). The `detect` extra installs SpeciesNet and
@@ -212,7 +212,7 @@ seven held-out cameras from 72 to 92 of 104**, and wrong events fell from 16 to 
 gain came mostly from overexposed night images, where correct events rose from 27 to 40
 of 45, and none of the detections it changed on those cameras went from right to wrong.
 The full method, per-species results and limitations are in the
-[case study](docs/case-study-kgalagadi.md).
+[case study](https://github.com/ivanposavecwildlife/CamTrapTools/blob/main/docs/case-study-kgalagadi.md).
 
 ### Ecological consequences
 
@@ -223,7 +223,7 @@ wildcat looked absent from the park, and steenbok looked more diurnal than it is
 missed records to 18**; reviewing half recovered all of them. A cross-fitted adapted
 layer cut missed records to 32, and to 25 with 10% of events reviewed.
 
-![Test-camera detections that the adapted layer identified correctly](docs/adapted-examples.jpg)
+![Test-camera detections that the adapted layer identified correctly](https://raw.githubusercontent.com/ivanposavecwildlife/CamTrapTools/main/docs/adapted-examples.jpg)
 
 ## Roadmap
 
@@ -257,7 +257,7 @@ the models. Tests for `adapt` need PyTorch and run when the extra is installed.
 
 ## License
 
-[MIT](LICENSE). The optional `detect` extra installs
+[MIT](https://github.com/ivanposavecwildlife/CamTrapTools/blob/main/LICENSE). The optional `detect` extra installs
 [SpeciesNet](https://github.com/google/cameratrapai) (Apache-2.0), whose MegaDetector
 inference code is GPL-licensed. Snapshot Kgalagadi data used for validation is published by
 [Snapshot Safari](https://lila.science/datasets/snapshot-kgalagadi/) under the

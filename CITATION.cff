@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use CamTrapTools in your work, please cite it as below."
+title: "CamTrapTools: open-source toolkit for camera-trap projects, from SD card to ecological answers"
+type: software
+authors:
+  - family-names: Posavec
+    given-names: Ivan
+repository-code: "https://github.com/ivanposavecwildlife/CamTrapTools"
+url: "https://github.com/ivanposavecwildlife/CamTrapTools"
+license: MIT
+version: "0.5.0"
+date-released: "2026-10-20"
+keywords:
+  - camera traps
+  - wildlife monitoring
+  - ecology
+  - Camtrap DP
+  - SpeciesNet
+  - occupancy

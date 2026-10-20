@@ -20,6 +20,7 @@ from camtraptools.crops import CROPS_FILE, DEFAULT_PADDING, crop_box
 from camtraptools.detect import (
     ADAPTED_FILE,
     DEFAULT_MODEL,
+    INSTALL_DETECT,
     RESULTS_FILE,
     load_detections,
     parse_taxon,
@@ -43,7 +44,7 @@ def require_torch():
         import torch
     except ImportError as error:
         raise RuntimeError(
-            "Adapting needs the optional 'detect' extra. Install it with: uv sync --extra detect"
+            f"Adapting needs the optional 'detect' extra. {INSTALL_DETECT}"
         ) from error
     return torch
 
@@ -104,7 +105,7 @@ def load_speciesnet(model: str = DEFAULT_MODEL):
         from speciesnet.utils import ModelInfo
     except ImportError as error:
         raise RuntimeError(
-            "Adapting needs the optional 'detect' extra. Install it with: uv sync --extra detect"
+            f"Adapting needs the optional 'detect' extra. {INSTALL_DETECT}"
         ) from error
     info = ModelInfo(model)
     classifier = torch.load(info.classifier, map_location="cpu", weights_only=False)
