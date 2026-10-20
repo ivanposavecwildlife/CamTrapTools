@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-20
+
+Deliverables for partners: a one-page survey summary, species richness, occupancy
+with site covariates, privacy options for publishing, and videos.
+
 ### Added
 
 - Videos: `ingest --videos` includes MP4, MOV and AVI files as media, with the
@@ -310,6 +315,7 @@ First release: ingest, quality checks and an HTML health report.
   summary table and all issues, in light and dark mode.
 - Continuous integration on Python 3.11–3.14 (Linux) and on Windows and macOS.
 
+[0.7.0]: https://github.com/ivanposavecwildlife/CamTrapTools/releases/tag/v0.7.0
 [0.6.0]: https://github.com/ivanposavecwildlife/CamTrapTools/releases/tag/v0.6.0
 [0.5.0]: https://github.com/ivanposavecwildlife/CamTrapTools/releases/tag/v0.5.0
 [0.4.0]: https://github.com/ivanposavecwildlife/CamTrapTools/releases/tag/v0.4.0
