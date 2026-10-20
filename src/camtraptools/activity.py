@@ -42,7 +42,9 @@ def scaled_bessel(order: int, value):
     theta = np.linspace(0, math.pi, 2001)
     values = np.atleast_1d(np.asarray(value, dtype=float))
     integrand = np.exp(values[:, None] * (np.cos(theta) - 1)) * np.cos(order * theta)
-    result = np.trapezoid(integrand, theta, axis=1) / math.pi
+    # trapezoid rule, written out so it works with NumPy 1.26 as well as 2.x
+    step = theta[1] - theta[0]
+    result = (integrand[:, 1:] + integrand[:, :-1]).sum(axis=1) * step / 2 / math.pi
     return result if np.ndim(value) else float(result[0])
 
 

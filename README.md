@@ -271,10 +271,10 @@ uv run ruff check src tests
 uv run pytest
 ```
 
-CI runs the linter and tests on Python 3.11–3.14 (Linux) and on Windows, without the
-`detect` extra: tests use stand-ins for SpeciesNet, so CI never downloads the models.
-The full suite, including the tests that need PyTorch, runs on macOS before each
-release.
+CI runs the linter and tests on Python 3.11–3.14 (Linux) and on Windows and macOS
+(Intel) for every push, and on macOS (Apple Silicon) weekly and for every release,
+without the `detect` extra: tests use stand-ins for SpeciesNet, so CI never downloads
+the models. Tests for `adapt` need PyTorch and run when the extra is installed.
 
 ## License
 

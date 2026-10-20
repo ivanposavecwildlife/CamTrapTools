@@ -12,6 +12,7 @@ jobs:
   test:
     name: Python ${{ matrix.python }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -19,6 +20,9 @@ jobs:
         python: ["3.11", "3.12", "3.13", "3.14"]
         include:
           - os: windows-latest
+            python: "3.14"
+          # macOS on Intel; Apple Silicon runs in macos.yml (see there why)
+          - os: macos-15-intel
             python: "3.14"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

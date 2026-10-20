@@ -1,0 +1,33 @@
+name: macOS (Apple Silicon)
+
+# GitHub's Apple Silicon runners (macos-latest, macos-15) were often unavailable in
+# October 2026, while projects moved off macOS 14, so jobs were cancelled before they
+# started. This workflow runs weekly, on every release and on demand, so such delays
+# do not mark every commit as failed. CI checks macOS on Intel on every push.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Python 3.14 on macos-latest
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          python-version: "3.14"
+      - name: Install dependencies
+        run: uv sync --locked
+      - name: Lint
+        run: uv run ruff check src tests
+      - name: Test
+        run: uv run pytest

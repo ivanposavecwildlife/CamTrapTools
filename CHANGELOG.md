@@ -24,9 +24,15 @@ All notable changes to this project are documented here. The format follows
 - When `detect` continues an interrupted run, it counts only images SpeciesNet has
   finished; its saved progress also lists images not reached yet, which are processed
   again.
-- CI no longer runs on macOS: GitHub's Apple Silicon runners were often unavailable and
-  the job was cancelled without running. The full test suite runs on macOS before each
-  release.
+- CI tests macOS on Intel (`macos-15-intel`) for every push, and Apple Silicon
+  (`macos-latest`) weekly, for every release and on demand: GitHub's Apple Silicon
+  runners were often unavailable, so jobs were cancelled before they started. macOS
+  jobs time out after 30 to 60 minutes instead of waiting indefinitely.
+
+### Fixed
+
+- Activity and richness calculations work with NumPy 1.26, which Intel Macs install;
+  they failed there because `numpy.trapezoid` needs NumPy 2.
 
 ## [0.7.0] - 2026-10-20
 
