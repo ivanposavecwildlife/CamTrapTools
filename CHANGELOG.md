@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- User guide (`docs/user-guide.md`): installation, preparing images and field sheets,
+  every step from `ingest` to `export` with example output and how to read it, choosing
+  a workflow, the files in a package, troubleshooting and a command reference.
+
 ## [0.5.0] - 2026-10-20
 
 Ecology: detection histories, occupancy corrected for imperfect detection, daily

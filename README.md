@@ -118,6 +118,9 @@ flash (`cam_noflash`) and clock errors.*
 
 ## Quick start
 
+New to CamTrapTools? The [user guide](docs/user-guide.md) walks through a whole survey
+step by step, with the output of every command.
+
 Requires [uv](https://docs.astral.sh/uv/). The `detect` extra installs SpeciesNet and
 PyTorch (about 1 GB); leave it out if you only need the quality checks.
 
