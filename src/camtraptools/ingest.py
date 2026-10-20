@@ -147,28 +147,89 @@ TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
 def run(
     images_dir: Path, out_dir: Path, field_sheet: Path | None = None, depth: int = 1
-) -> tuple[pd.DataFrame, pd.DataFrame, list[str]]:
+) -> tuple[pd.DataFrame, pd.DataFrame, list[str], dict[str, pd.Timedelta]]:
     """Build the media and deployments tables, merge the optional field sheet,
     check it, and write the tables as CSV files to ``out_dir``. Deployments are the
     folders ``depth`` levels below ``images_dir``.
 
-    Returns the two tables and a list of field-sheet issues.
+    If the field sheet gives a deployment's ``cameraTime`` and ``actualTime``, its
+    image times are corrected first (see ``correct_clocks``).
+
+    Returns the two tables, a list of field-sheet issues and the clock correction
+    applied to each corrected deployment.
     """
     media = build_media(images_dir, depth)
-    deployments = build_deployments(media)
     issues = []
+    corrections = {}
     if field_sheet is not None:
         sheet = parse_recorded_periods(read_field_sheet(field_sheet))
-        issues += check_field_sheet(sheet)
+        corrections, clock_issues = clock_offsets(sheet)
+        media = correct_clocks(media, corrections)
+        issues += check_field_sheet(sheet) + clock_issues
         issues += match_deployments(sheet, media)
         issues += check_recorded_periods(sheet, media)
-        deployments = add_field_sheet(deployments, sheet)
+        deployments = add_field_sheet(build_deployments(media), sheet.drop(columns=CLOCK_COLUMNS, errors="ignore"))
+    else:
+        deployments = build_deployments(media)
     out_dir.mkdir(parents=True, exist_ok=True)
     media.to_csv(out_dir / "media.csv", index=False, date_format=TIMESTAMP_FORMAT)
     deployments.to_csv(
         out_dir / "deployments.csv", index=False, date_format=TIMESTAMP_FORMAT
     )
-    return media, deployments, issues
+    return media, deployments, issues, corrections
+
+
+CLOCK_COLUMNS = ["cameraTime", "actualTime"]
+
+
+def clock_offsets(sheet: pd.DataFrame) -> tuple[dict[str, pd.Timedelta], list[str]]:
+    """Return how far each deployment's camera clock was off, from the field sheet's
+    optional ``cameraTime`` (what the camera showed, e.g. on a photo of a phone clock)
+    and ``actualTime`` (the real time at that moment) columns, and problems with them."""
+    if not set(CLOCK_COLUMNS) & set(sheet.columns):
+        return {}, []
+    offsets, issues = {}, []
+    for row in sheet.drop_duplicates("deploymentID").to_dict("records"):
+        values = [row.get(column) for column in CLOCK_COLUMNS]
+        given = [isinstance(value, str) and value.strip() or (not pd.isna(value) and value) for value in values]
+        if not any(given):
+            continue
+        if not all(given):
+            issues.append(f"{row['deploymentID']}: clock correction needs both cameraTime and actualTime")
+            continue
+        camera, actual = (pd.to_datetime(value, format="ISO8601", errors="coerce") for value in values)
+        if pd.isna(camera) or pd.isna(actual):
+            issues.append(f"{row['deploymentID']}: unreadable cameraTime or actualTime")
+        elif actual != camera:
+            offsets[row["deploymentID"]] = actual - camera
+    return offsets, issues
+
+
+def format_offset(offset: pd.Timedelta) -> str:
+    """Return a clock correction such as ``+1:00:00`` or ``-3 days 02:15:00``."""
+    sign = "-" if offset < pd.Timedelta(0) else "+"
+    seconds = int(abs(offset).total_seconds())
+    days, rest = divmod(seconds, 86400)
+    clock = f"{rest // 3600}:{rest % 3600 // 60:02d}:{rest % 60:02d}"
+    return f"{sign}{days} days {clock}" if days else f"{sign}{clock}"
+
+
+def correct_clocks(media: pd.DataFrame, offsets: dict[str, pd.Timedelta]) -> pd.DataFrame:
+    """Return the media with each corrected deployment's timestamps shifted by its
+    offset, and the camera's original time kept in ``mediaComments``."""
+    if not offsets:
+        return media
+    media = media.copy()
+    if "mediaComments" not in media.columns:
+        media["mediaComments"] = None
+    for deployment_id, offset in offsets.items():
+        rows = (media["deploymentID"] == deployment_id) & media["timestamp"].notna()
+        original = media.loc[rows, "timestamp"]
+        media.loc[rows, "timestamp"] = original + offset
+        media.loc[rows, "mediaComments"] = [
+            f"Camera clock corrected by {format_offset(offset)}; camera time {time.isoformat()}" for time in original
+        ]
+    return media
 
 
 REQUIRED_FIELD_SHEET_COLUMNS = ["deploymentID", "latitude", "longitude"]

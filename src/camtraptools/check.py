@@ -31,12 +31,12 @@ def check_implausible_dates(
     too_early = (media["timestamp"] < EARLIEST_PLAUSIBLE).sum()
     if too_early:
         issues.append(
-            f"{too_early} image(s) dated before {EARLIEST_PLAUSIBLE.year}; the camera clock was probably reset"
+            f"{too_early} image(s) dated before {EARLIEST_PLAUSIBLE.year}; the camera clock was probably reset (correct it with cameraTime and actualTime in the field sheet)"
         )
     in_future = (media["timestamp"] > now).sum()
     if in_future:
         issues.append(
-            f"{in_future} image(s) dated in the future; the camera clock was set wrongly"
+            f"{in_future} image(s) dated in the future; the camera clock was set wrongly (correct it with cameraTime and actualTime in the field sheet)"
         )
     return issues
 

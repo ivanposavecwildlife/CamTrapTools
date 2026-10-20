@@ -76,7 +76,7 @@ def ingest_cmd(
 ) -> None:
     """Scan images and build deployments.csv and media.csv."""
     try:
-        media, deployments, issues = ingest.run(images, out, field_sheet, folder_depth)
+        media, deployments, issues, corrections = ingest.run(images, out, field_sheet, folder_depth)
     except ValueError as error:
         typer.echo(f"Error: {error}", err=True)
         raise typer.Exit(1)
@@ -93,6 +93,8 @@ def ingest_cmd(
             f"Skipped {crops.plural(outside, 'JPEG image')} not inside a deployment folder; "
             f"check the folder layout or --folder-depth (now {folder_depth})."
         )
+    for deployment_id, offset in corrections.items():
+        typer.echo(f"Corrected the clock of {deployment_id} by {ingest.format_offset(offset)}.")
     if issues:
         typer.echo(f"{len(issues)} field-sheet issue(s):")
         for issue in issues:

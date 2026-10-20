@@ -50,8 +50,8 @@ def test_implausible_dates_flag_reset_clock_and_future():
     issues = check_implausible_dates(media, now=pd.Timestamp("2026-01-01"))
 
     assert issues == [
-        "1 image(s) dated before 2010; the camera clock was probably reset",
-        "1 image(s) dated in the future; the camera clock was set wrongly",
+        "1 image(s) dated before 2010; the camera clock was probably reset (correct it with cameraTime and actualTime in the field sheet)",
+        "1 image(s) dated in the future; the camera clock was set wrongly (correct it with cameraTime and actualTime in the field sheet)",
     ]
 
 

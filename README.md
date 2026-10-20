@@ -169,6 +169,7 @@ A CSV or Excel file with one row per deployment. Column names follow Camtrap DP.
 | `deploymentID` | yes, matches the folder name | `camera_A` |
 | `latitude`, `longitude` | yes | `52.7031`, `23.8452` |
 | `deploymentStart`, `deploymentEnd` | recommended | `2024-05-01T09:15`, `2024-06-30` |
+| `cameraTime`, `actualTime` | optional, to correct a wrong clock | `2010-01-01T00:04`, `2024-05-01T09:19` |
 | any other Camtrap DP column | no | `locationName`, `cameraModel`, `cameraHeight`, `deploymentComments` |
 
 Recorded start and end times take priority over the first and last image, which usually

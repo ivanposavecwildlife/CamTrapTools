@@ -700,3 +700,21 @@ def test_ingest_command_reports_skipped_files_and_reads_nested_folders(make_imag
     assert "Skipped 1 file that is not a JPEG image: .mp4 (1)" in result.output
     assert "Skipped 1 JPEG image not inside a deployment folder" in result.output
     assert pd.read_csv(tmp_path / "package" / "deployments.csv")["deploymentID"].tolist() == ["north_camera_A"]
+
+
+def test_ingest_command_reports_clock_corrections(make_image, tmp_path):
+    make_image("images/cam_reset/IMG_0001.JPG", date_time_original="2010:01:01 00:05:00")
+    sheet = tmp_path / "sheet.csv"
+    sheet.write_text(
+        "deploymentID,latitude,longitude,cameraTime,actualTime\n"
+        "cam_reset,52.7,23.8,2010-01-01T00:00:00,2024-03-01T08:00:00\n"
+    )
+
+    result = runner.invoke(
+        app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package"), "--field-sheet", str(sheet)]
+    )
+    checked = runner.invoke(app, ["check", str(tmp_path / "package")])
+
+    assert result.exit_code == 0, result.output
+    assert "Corrected the clock of cam_reset by +5173 days 8:00:00." in result.output
+    assert "before 2010" not in checked.output

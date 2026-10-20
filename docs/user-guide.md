@@ -172,6 +172,7 @@ cannot tell: where the camera was and when it really started and stopped.
 | `deploymentStart` | recommended | `2024-05-01T09:15` | When the camera was set up |
 | `deploymentEnd` | recommended | `2024-06-30T16:00` | When it was collected |
 | `locationName`, `locationID` | optional | `North ridge` | Deployments with the same location are treated as one site |
+| `cameraTime`, `actualTime` | optional | `2010-01-01T00:04`, `2024-05-01T09:19` | Corrects a wrong camera clock; see below |
 | any other Camtrap DP column | optional | `cameraModel`, `cameraHeight`, `habitat`, `deploymentComments` | Kept in the package |
 
 ```csv
@@ -186,6 +187,21 @@ hides a camera that died early, because the silence after its last image is invi
 
 **Time zones.** Write times as the camera clocks showed them (local time). You give
 the time zone once, when you publish.
+
+**Wrong camera clocks.** Cameras often lose their clock after a battery change and
+restart at a date like 2010-01-01. To correct it, photograph a phone showing the time
+with the camera (or note the camera's display), and fill in two columns: `cameraTime`,
+the time the camera showed, and `actualTime`, the real time at that moment. `ingest`
+shifts all of that deployment's images by the difference, keeps each image's original
+camera time in `mediaComments`, and reports it:
+
+```
+Corrected the clock of cam_reset by +5173 days 8:00:00.
+```
+
+The correction applies to the whole deployment. If a clock was reset partway through,
+put the images from before and after the reset in two folders (two deployments) and
+correct only the second.
 
 ## Step 1: build the package (`ingest`)
 
@@ -251,8 +267,8 @@ cam_vegetation: 3.5 days, 406 images, longest gap 0.8 days
 
 | Message | Likely cause | What to do |
 |---|---|---|
-| Images dated before 2010 or in the future | Clock reset after a battery change, or set wrongly | Correct the times before analysis, or leave the affected images out |
-| Clock went back | Clock reset during the deployment | As above; the file named is where it happened |
+| Images dated before 2010 or in the future | Clock reset after a battery change, or set wrongly | Add `cameraTime` and `actualTime` to the field sheet and run `ingest` again |
+| Clock went back | Clock reset during the deployment | Split the images at the file named into two deployments, then correct the second |
 | No images in the last 21+ days before pickup | Battery died or card full (needs `deploymentEnd`) | Shorten the deployment's end date to the last image |
 | No images for 21+ days in the middle | Camera knocked over, covered or faulty | Check field notes; remove the period from effort if the camera was not working |
 | No images in the first 21+ days | Setup date wrong on the field sheet | Check the field sheet |

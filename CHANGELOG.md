@@ -8,6 +8,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Clock correction: optional `cameraTime` and `actualTime` field-sheet columns (what a
+  camera's clock showed and the real time at that moment) make `ingest` shift all of
+  that deployment's image times by the difference before deployment periods are
+  derived, keep each image's original camera time in `mediaComments`, and report the
+  correction. `check` suggests these columns when it finds a wrong clock.
 - Relative abundance index in `ecology`: independent events per 100 camera-days for
   each species, in `occupancy.csv` and the printed table, and per site and species in
   `rai.csv`.
