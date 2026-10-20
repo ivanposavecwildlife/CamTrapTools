@@ -8,6 +8,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Videos: `ingest --videos` includes MP4, MOV and AVI files as media, with the
+  recording time read from the file (the `mvhd` header of MP4 and MOV, wherever it is
+  in the file, or the `IDIT` chunk of AVI) or else the file date, noted in
+  `mediaComments`. `detect` samples frames from each video (`--frame-interval`,
+  default one per second, `--max-frames`, default 10) into `frames/`, runs SpeciesNet on
+  them and uses the frame with the most confident animal as the video's result,
+  recorded with its path. The review app shows a video's best frame with the AI's boxes
+  and a player for the clip.
 - `summary` command: a self-contained HTML page of a survey's results to share with a
   project, with the survey's key numbers, camera problems and timeline, a species table
   (events, relative abundance index, sites, naive and modelled occupancy with

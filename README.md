@@ -36,7 +36,9 @@ flash (`cam_noflash`) and clock errors.*
 ## Features
 
 - **`ingest`**: scans SD-card folders (one per camera), reads capture times from EXIF and
-  writes `media.csv` and `deployments.csv` in Camtrap DP format. An optional CSV or Excel
+  writes `media.csv` and `deployments.csv` in Camtrap DP format. With `--videos`, MP4,
+  MOV and AVI clips are included too, with recording times read from the files, and
+  `detect` identifies animals in frames sampled from them. An optional CSV or Excel
   **field sheet** adds coordinates, camera details and the recorded setup and pickup times.
 - **Field-sheet validation**: duplicate IDs, impossible coordinates, unreadable dates and
   camera names that don't match their folders, with suggestions such as

@@ -141,8 +141,9 @@ sd_cards/
 └── camera_C/IMG_0001.JPG …
 ```
 
-- Only JPEG images (`.jpg`, `.jpeg`) are read. Videos and other files are skipped,
-  and `ingest` says how many of each kind it skipped.
+- JPEG images (`.jpg`, `.jpeg`) are read. Videos (`.mp4`, `.mov`, `.avi`) are read
+  with `--videos` (see below); other files are skipped, and `ingest` says how many of
+  each kind it skipped.
 - Folder names become deployment IDs, so use short names without spaces, such as
   `A02` or `north_ridge_2024`.
 - Keep the original files. CamTrapTools never changes or moves images; it only reads
@@ -233,6 +234,24 @@ If the field sheet has problems, `ingest` lists them, for example:
 
 Fix the sheet and run `ingest` again; it overwrites the two tables and never touches
 later results.
+
+**Videos.** If your cameras record video, add `--videos`:
+
+```bash
+camtraptools ingest sd_cards --out my_survey --field-sheet field_sheet.csv --videos
+```
+
+```
+Found 1 image and 2 videos from 1 deployment.
+  1 video stores no recording time; the file date is used
+```
+
+The recording time is read from the video file, where trail cameras store it. When a
+video has none, the file's date is used and noted in `mediaComments`; copy cards in a
+way that keeps file dates. `detect` then samples one frame per second of each clip (at
+most 10, set with `--frame-interval` and `--max-frames`), runs SpeciesNet on them, and
+uses the frame with the most confident animal as the video's result. In the review
+app, a video shows that frame with the AI's boxes and a player for the clip.
 
 `ingest` also reports files it did not read, such as
 `Skipped 118 files that are not JPEG images: .mp4 (118)`, and JPEG images that are not
@@ -870,7 +889,7 @@ original answer next to yours.
 | Many "Bovidae" or "animal" events | Normal for distant or night images; review them, or adapt the AI |
 | `deployments without coordinates` on export | Add `latitude` and `longitude` to the field sheet and run `ingest` again |
 | Occupancy shows "detection too rare to estimate" | The survey recorded the species too rarely; report naive occupancy with that caveat, or survey longer or with more cameras |
-| Images missing from `media.csv` | Only `.jpg`/`.jpeg` files are read, and hidden files (starting with `.`) are skipped; `ingest` reports what it skipped |
+| Images missing from `media.csv` | Only `.jpg`/`.jpeg` files are read (and videos with `--videos`), and hidden files (starting with `.`) are skipped; `ingest` reports what it skipped |
 | `ingest` finds one deployment per site instead of per camera | Your cards are organised in more levels; use `--folder-depth 2` |
 | `detect` stopped halfway | Run the same command again; it continues from the last save |
 
@@ -878,10 +897,10 @@ original answer next to yours.
 
 | Command | Purpose | Main options |
 |---|---|---|
-| `ingest IMAGES` | Build the package | `--out`, `--field-sheet`, `--folder-depth` |
+| `ingest IMAGES` | Build the package | `--out`, `--field-sheet`, `--folder-depth`, `--videos` |
 | `check PACKAGE` | Camera problems | `--max-gap-days` |
 | `report PACKAGE` | HTML health report | `--out`, `--max-gap-days` |
-| `detect PACKAGE` | Run SpeciesNet | `--images`, `--country`, `--admin1-region`, `--threshold`, `--rerun`, `--adapted`, `--adapted-threshold`, `--model` |
+| `detect PACKAGE` | Run SpeciesNet | `--images`, `--country`, `--admin1-region`, `--threshold`, `--rerun`, `--adapted`, `--adapted-threshold`, `--frame-interval`, `--max-frames`, `--model` |
 | `import PACKAGE RESULTS` | Use another tool's results | `--threshold` |
 | `events PACKAGE` | Independent visits | `--gap` |
 | `review PACKAGE` | Review app | `--images`, `--reviewer`, `--order`, `--port`, `--no-open-browser` |

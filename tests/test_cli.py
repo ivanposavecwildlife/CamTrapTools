@@ -157,7 +157,7 @@ def test_detect_command_summarizes_results(make_image, monkeypatch, tmp_path):
     runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")])
     monkeypatch.setattr(
         "camtraptools.detect.run",
-        lambda package, images, model, country, admin1_region: write_speciesnet_results(package, 0.9, country),
+        lambda package, images, model, country, admin1_region, **options: write_speciesnet_results(package, 0.9, country),
     )
 
     result = runner.invoke(

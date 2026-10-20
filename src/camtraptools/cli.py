@@ -27,6 +27,7 @@ from camtraptools import (
     review,
     richness,
     summary,
+    video,
 )
 
 app = typer.Typer(
@@ -77,15 +78,25 @@ def ingest_cmd(
             help="Folder level that holds one deployment each, e.g. 2 for site/camera/ (deployment site_camera).",
         ),
     ] = 1,
+    videos: Annotated[
+        bool, typer.Option(help="Include MP4, MOV and AVI videos; `detect` then samples frames from them.")
+    ] = False,
 ) -> None:
     """Scan images and build deployments.csv and media.csv."""
     try:
-        media, deployments, issues, corrections = ingest.run(images, out, field_sheet, folder_depth)
+        media, deployments, issues, corrections = ingest.run(images, out, field_sheet, folder_depth, videos)
     except ValueError as error:
         typer.echo(f"Error: {error}", err=True)
         raise typer.Exit(1)
-    typer.echo(f"Found {crops.plural(len(media), 'image')} from {crops.plural(len(deployments), 'deployment')}.")
-    skipped = ingest.skipped_files(images, folder_depth)
+    clips = int(media["fileMediatype"].fillna("").str.startswith("video/").sum()) if len(media) else 0
+    found = crops.plural(len(media) - clips, "image") + (f" and {crops.plural(clips, 'video')}" if clips else "")
+    typer.echo(f"Found {found} from {crops.plural(len(deployments), 'deployment')}.")
+    if videos:
+        undated = media["mediaComments"].notna().sum() if "mediaComments" in media.columns else 0
+        if undated:
+            verb = "stores" if undated == 1 else "store"
+            typer.echo(f"  {crops.plural(int(undated), 'video')} {verb} no recording time; the file date is used")
+    skipped = ingest.skipped_files(images, folder_depth, videos)
     outside = skipped.pop(ingest.OUTSIDE_DEPLOYMENTS, 0)
     if skipped:
         kinds = ", ".join(f"{kind} ({count})" for kind, count in skipped.most_common())
@@ -195,6 +206,10 @@ def detect_cmd(
         float, typer.Option(help="Minimum detection confidence for keeping a detection as an observation.")
     ] = detect.DEFAULT_THRESHOLD,
     rerun: Annotated[bool, typer.Option(help="Run SpeciesNet even if results for these settings exist.")] = False,
+    frame_interval: Annotated[
+        float, typer.Option(min=0.1, help="Seconds between frames sampled from videos.")
+    ] = video.DEFAULT_FRAME_INTERVAL,
+    max_frames: Annotated[int, typer.Option(min=1, help="Most frames sampled from one video.")] = video.DEFAULT_MAX_FRAMES,
     adapted: Annotated[
         Path | None,
         typer.Option(exists=True, help="Folder with an adapted layer from `camtraptools adapt`, to identify animals."),
@@ -217,13 +232,16 @@ def detect_cmd(
             typer.echo("Error: --images is required to run SpeciesNet.", err=True)
             raise typer.Exit(1)
         media = pd.read_csv(package / "media.csv")
-        done = detect.saved_progress(package, detect.run_settings(media, images, model, country, admin1_region))
+        settings = detect.run_settings(media, images, model, country, admin1_region, frame_interval, max_frames)
+        done = detect.saved_progress(package, settings)
         if done:
-            typer.echo(f"Continuing an interrupted run: {done} of {crops.plural(len(media), 'image')} already done.")
+            typer.echo(f"Continuing an interrupted run: {done} of {crops.plural(len(media), 'file')} already done.")
         else:
-            typer.echo(f"Running SpeciesNet on {crops.plural(len(media), 'image')}; progress is saved every 10 minutes.")
+            typer.echo(f"Running SpeciesNet on {crops.plural(len(media), 'file')}; progress is saved every 10 minutes.")
         try:
-            results_file = detect.run(package, images, model, country, admin1_region)
+            results_file = detect.run(
+                package, images, model, country, admin1_region, frame_interval=frame_interval, max_frames=max_frames
+            )
         except RuntimeError as error:
             typer.echo(f"Error: {error}", err=True)
             raise typer.Exit(1)

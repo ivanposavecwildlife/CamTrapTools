@@ -20,6 +20,8 @@ from pathlib import Path
 import pandas as pd
 from PIL import ExifTags, Image
 
+from camtraptools import video
+
 
 def read_timestamp(image_path: Path) -> datetime | None:
     """Return the capture time from the image's EXIF ``DateTimeOriginal`` tag.
@@ -54,19 +56,20 @@ def is_image(path: Path) -> bool:
     return path.suffix.lower() in IMAGE_EXTENSIONS and not path.name.startswith(".")
 
 
-def find_images(deployment_dir: Path) -> list[Path]:
-    """Return every image under ``deployment_dir``, including subfolders, sorted by path."""
-    images = []
+def find_images(deployment_dir: Path, videos: bool = False) -> list[Path]:
+    """Return every image (and with ``videos``, every video) under ``deployment_dir``,
+    including subfolders, sorted by path."""
+    found = []
     for path in deployment_dir.rglob("*"):
-        if path.is_file() and is_image(path):
-            images.append(path)
-    return sorted(images)
+        if path.is_file() and (is_image(path) or (videos and video.is_video(path))):
+            found.append(path)
+    return sorted(found)
 
 
 def media_row(image_path: Path, images_dir: Path, deployment_id: str) -> dict:
-    """Return the Camtrap DP media record for a single image."""
+    """Return the Camtrap DP media record for a single image or video."""
     relative_path = image_path.relative_to(images_dir).as_posix()
-    return {
+    row = {
         "mediaID": relative_path,
         "deploymentID": deployment_id,
         "timestamp": read_timestamp(image_path),
@@ -74,6 +77,12 @@ def media_row(image_path: Path, images_dir: Path, deployment_id: str) -> dict:
         "fileName": image_path.name,
         "fileMediatype": "image/jpeg",
     }
+    if video.is_video(image_path):
+        recorded, embedded = video.read_time(image_path)
+        row.update(timestamp=recorded, fileMediatype=video.media_type(image_path))
+        if not embedded:
+            row["mediaComments"] = "Recording time from the file date; the video stores none"
+    return row
 
 
 MEDIA_COLUMNS = [
@@ -101,20 +110,21 @@ def deployment_folders(images_dir: Path, depth: int = 1) -> list[tuple[str, Path
     return [("_".join(folder.relative_to(images_dir).parts), folder) for folder in folders]
 
 
-def build_media(images_dir: Path, depth: int = 1) -> pd.DataFrame:
-    """Return one row per image in the deployment folders of ``images_dir`` (see
-    ``deployment_folders``)."""
+def build_media(images_dir: Path, depth: int = 1, videos: bool = False) -> pd.DataFrame:
+    """Return one row per image (and with ``videos``, per video) in the deployment
+    folders of ``images_dir`` (see ``deployment_folders``)."""
     rows = []
     for deployment_id, deployment_dir in deployment_folders(images_dir, depth):
-        for image_path in find_images(deployment_dir):
+        for image_path in find_images(deployment_dir, videos):
             rows.append(media_row(image_path, images_dir, deployment_id))
-    return pd.DataFrame(rows, columns=MEDIA_COLUMNS)
+    columns = MEDIA_COLUMNS + (["mediaComments"] if any("mediaComments" in row for row in rows) else [])
+    return pd.DataFrame(rows, columns=columns)
 
 
 OUTSIDE_DEPLOYMENTS = "JPEG outside deployment folders"
 
 
-def skipped_files(images_dir: Path, depth: int = 1) -> Counter:
+def skipped_files(images_dir: Path, depth: int = 1, videos: bool = False) -> Counter:
     """Return the files under ``images_dir`` that ``build_media`` does not read, counted
     by extension (such as ``.mp4`` videos), and JPEG images that are not inside a
     deployment folder. Hidden files and folders are not counted."""
@@ -123,7 +133,7 @@ def skipped_files(images_dir: Path, depth: int = 1) -> Counter:
     for path in images_dir.rglob("*"):
         if not path.is_file() or any(part.startswith(".") for part in path.relative_to(images_dir).parts):
             continue
-        if not is_image(path):
+        if not is_image(path) and not (videos and video.is_video(path)):
             skipped[path.suffix.lower() or "(no extension)"] += 1
         elif not deployments.intersection(path.parents):
             skipped[OUTSIDE_DEPLOYMENTS] += 1
@@ -146,7 +156,7 @@ TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
 
 def run(
-    images_dir: Path, out_dir: Path, field_sheet: Path | None = None, depth: int = 1
+    images_dir: Path, out_dir: Path, field_sheet: Path | None = None, depth: int = 1, videos: bool = False
 ) -> tuple[pd.DataFrame, pd.DataFrame, list[str], dict[str, pd.Timedelta]]:
     """Build the media and deployments tables, merge the optional field sheet,
     check it, and write the tables as CSV files to ``out_dir``. Deployments are the
@@ -158,7 +168,7 @@ def run(
     Returns the two tables, a list of field-sheet issues and the clock correction
     applied to each corrected deployment.
     """
-    media = build_media(images_dir, depth)
+    media = build_media(images_dir, depth, videos)
     issues = []
     corrections = {}
     if field_sheet is not None:

@@ -27,6 +27,15 @@ def load_review_data(package_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
     return media, observations
 
 
+def video_frames(package_dir: Path) -> dict[str, str]:
+    """Return the best frame saved by ``detect`` for each video, by file path."""
+    results_file = package_dir / RESULTS_FILE
+    if not results_file.exists():
+        return {}
+    predictions = json.loads(results_file.read_text(encoding="utf-8"))["predictions"]
+    return {prediction["filepath"]: prediction["frame"] for prediction in predictions if prediction.get("frame")}
+
+
 def common_names(package_dir: Path) -> dict[str, str]:
     """Return common names by scientific name, from SpeciesNet's labels if available."""
     results_file = package_dir / RESULTS_FILE
@@ -59,6 +68,7 @@ def create_app(package_dir: Path, images_dir: Path, reviewer: str = "reviewer", 
     recording decisions under the name ``reviewer`` and showing events in ``order``."""
     media, observations = load_review_data(package_dir)
     names = common_names(package_dir)
+    frames = video_frames(package_dir)
     machine = observations[observations["classificationMethod"] != "human"]
     events = order_events(machine[machine["observationLevel"] == "event"], machine, order)
     event_ids = list(events["eventID"])
@@ -97,7 +107,12 @@ def create_app(package_dir: Path, images_dir: Path, reviewer: str = "reviewer", 
         detections = observations[(observations["eventID"] == event_id) & (observations["observationLevel"] == "media")]
         detections = detections[detections["classificationMethod"] != "human"]
         images = [
-            {"media": media.loc[media_id], "detections": group.dropna(subset=["bboxX"]).to_dict("records")}
+            {
+                "media": media.loc[media_id],
+                "detections": group.dropna(subset=["bboxX"]).to_dict("records"),
+                "frame": frames.get(media.loc[media_id, "filePath"]),
+                "video": str(media.loc[media_id].get("fileMediatype", "")).startswith("video/"),
+            }
             for media_id, group in detections.groupby("mediaID", sort=False)
         ]
         existing = reviews.load_reviews(package_dir)
@@ -151,5 +166,11 @@ def create_app(package_dir: Path, images_dir: Path, reviewer: str = "reviewer", 
         if media_id not in media.index:
             raise HTTPException(status_code=404, detail="no such image in the package")
         return FileResponse(images_dir / media.loc[media_id, "filePath"])
+
+    @app.get("/frame/{media_id:path}")
+    def frame(media_id: str) -> FileResponse:
+        if media_id not in media.index or media.loc[media_id, "filePath"] not in frames:
+            raise HTTPException(status_code=404, detail="no frame for this video")
+        return FileResponse(package_dir / frames[media.loc[media_id, "filePath"]])
 
     return app

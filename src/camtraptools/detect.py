@@ -13,6 +13,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from camtraptools import video
+
 DEFAULT_MODEL = "kaggle:google/speciesnet/pyTorch/v4.0.3a/1"
 DEFAULT_THRESHOLD = 0.2
 RESULTS_FILE = "speciesnet.json"
@@ -25,9 +27,18 @@ PARTIAL_FILE = "speciesnet.partial.json"
 PARTIAL_SETTINGS_FILE = "speciesnet.partial.settings.json"
 
 
-def run_settings(media: pd.DataFrame, images_dir: Path, model: str, country, admin1_region) -> dict:
+def run_settings(
+    media: pd.DataFrame,
+    images_dir: Path,
+    model: str,
+    country,
+    admin1_region,
+    frame_interval: float = video.DEFAULT_FRAME_INTERVAL,
+    max_frames: int = video.DEFAULT_MAX_FRAMES,
+) -> dict:
     """Return what a SpeciesNet run depends on, so saved progress is only reused for
-    exactly the same run: the model, region, images folder and list of images."""
+    exactly the same run: the model, region, images folder, list of images and how
+    frames are sampled from videos."""
     files = sorted(media["filePath"])
     return {
         "model": model,
@@ -36,7 +47,38 @@ def run_settings(media: pd.DataFrame, images_dir: Path, model: str, country, adm
         "images": str(images_dir.resolve()),
         "imageCount": len(files),
         "imageList": hashlib.sha256("\n".join(files).encode("utf-8")).hexdigest(),
+        "frameInterval": frame_interval,
+        "maxFrames": max_frames,
     }
+
+
+def is_video_media(media: pd.DataFrame) -> pd.Series:
+    """Return which media rows are videos."""
+    if "fileMediatype" not in media.columns:
+        return pd.Series(False, index=media.index)
+    return media["fileMediatype"].fillna("").str.startswith("video/")
+
+
+def best_frame(frames: list[dict]) -> dict | None:
+    """Return the prediction of the frame whose most confident animal detection is
+    the most confident of all frames, or of the frame with the most confident
+    detection of any kind when no frame has an animal."""
+    def confidence(prediction: dict, animals_only: bool) -> float:
+        detections = [
+            detection["conf"]
+            for detection in prediction.get("detections") or []
+            if not animals_only or detection.get("label") == "animal"
+        ]
+        return max(detections, default=-1.0)
+
+    usable = [frame for frame in frames if not frame.get("failures")]
+    if not usable:
+        return None
+    for animals_only in (True, False):
+        best = max(usable, key=lambda frame: confidence(frame, animals_only))
+        if confidence(best, animals_only) >= 0:
+            return best
+    return usable[0]
 
 
 def saved_progress(package_dir: Path, settings: dict) -> int:
@@ -63,9 +105,15 @@ def run(
     model: str = DEFAULT_MODEL,
     country: str | None = None,
     admin1_region: str | None = None,
+    frame_interval: float = video.DEFAULT_FRAME_INTERVAL,
+    max_frames: int = video.DEFAULT_MAX_FRAMES,
 ) -> Path:
     """Run SpeciesNet on every image in the package and save its predictions as
     ``speciesnet.json`` in the package, with paths relative to ``images_dir``.
+
+    For videos, a frame is sampled every ``frame_interval`` seconds (at most
+    ``max_frames``) into ``frames/`` in the package, and the video's result is that of
+    its best frame (see ``best_frame``), whose path is recorded as ``frame``.
 
     SpeciesNet saves its progress every 10 minutes in ``speciesnet.partial.json``; if a
     run is interrupted, running it again with the same settings continues from there.
@@ -77,13 +125,21 @@ def run(
             f"Detection needs the optional 'detect' extra. {INSTALL_DETECT}"
         ) from error
     media = pd.read_csv(package_dir / "media.csv")
-    settings = run_settings(media, images_dir, model, country, admin1_region)
+    settings = run_settings(media, images_dir, model, country, admin1_region, frame_interval, max_frames)
     saved_progress(package_dir, settings)
     partial = package_dir / PARTIAL_FILE
     (package_dir / PARTIAL_SETTINGS_FILE).write_text(json.dumps(settings), encoding="utf-8")
-    image_files = [str(images_dir / file_path) for file_path in media["filePath"]]
+    videos = is_video_media(media)
+    frames = {
+        file_path: video.sample_frames(
+            images_dir / file_path, package_dir / video.FRAMES_FOLDER / file_path, frame_interval, max_frames
+        )
+        for file_path in media.loc[videos, "filePath"]
+    }
+    image_files = [str(images_dir / file_path) for file_path in media.loc[~videos, "filePath"]]
+    frame_files = [str(frame) for paths in frames.values() for frame in paths]
     SpeciesNet(model).predict(
-        filepaths=image_files,
+        filepaths=image_files + frame_files,
         country=country,
         admin1_region=admin1_region,
         predictions_json=str(partial),
@@ -91,10 +147,19 @@ def run(
     )
     predictions = json.loads(partial.read_text(encoding="utf-8"))
     by_file = {prediction["filepath"]: prediction for prediction in predictions["predictions"]}
-    predictions["predictions"] = [
-        {**by_file[image_file], "filepath": file_path}
-        for image_file, file_path in zip(image_files, media["filePath"], strict=True)
-    ]
+    combined = []
+    for file_path, is_clip in zip(media["filePath"], videos, strict=True):
+        if not is_clip:
+            combined.append({**by_file[str(images_dir / file_path)], "filepath": file_path})
+            continue
+        clip_frames = [by_file[str(frame)] for frame in frames[file_path]]
+        best = best_frame(clip_frames)
+        if best is None:
+            combined.append({"filepath": file_path, "failures": ["VIDEO"]})
+            continue
+        frame = Path(best["filepath"]).relative_to(package_dir).as_posix()
+        combined.append({**best, "filepath": file_path, "frame": frame, "frames": len(clip_frames)})
+    predictions["predictions"] = combined
     predictions["info"] = {
         **predictions.get("info", {}),
         "model": model,

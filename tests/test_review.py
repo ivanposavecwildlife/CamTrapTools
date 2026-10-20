@@ -226,6 +226,34 @@ def test_free_port_avoids_a_busy_port():
     assert review.free_port(free) == free
 
 
+def test_videos_show_their_best_frame_and_a_player(package):
+    package_dir, images = package
+    media = pd.read_csv(package_dir / "media.csv")
+    media.loc[1, ["mediaID", "filePath", "fileName"]] = ["camera_A/CLIP_0002.MP4", "camera_A/CLIP_0002.MP4", "CLIP_0002.MP4"]
+    media["fileMediatype"] = ["image/jpeg", "video/mp4", "image/jpeg"]
+    media.to_csv(package_dir / "media.csv", index=False)
+    observations = pd.read_csv(package_dir / "observations.csv")
+    observations.loc[1, "mediaID"] = "camera_A/CLIP_0002.MP4"
+    observations.to_csv(package_dir / "observations.csv", index=False)
+    (images / "camera_A/CLIP_0002.MP4").write_bytes(b"video")
+    frame = package_dir / "frames/camera_A/CLIP_0002.MP4/frame_001.jpg"
+    frame.parent.mkdir(parents=True)
+    frame.write_bytes(b"frame")
+    results = json.loads((package_dir / "speciesnet.json").read_text())
+    results["predictions"].append(
+        {"filepath": "camera_A/CLIP_0002.MP4", "frame": "frames/camera_A/CLIP_0002.MP4/frame_001.jpg"}
+    )
+    (package_dir / "speciesnet.json").write_text(json.dumps(results))
+    client = TestClient(review.create_app(package_dir, images))
+
+    page = client.get("/events/camera_A-0001").text
+
+    assert '<img src="/frame/camera_A/CLIP_0002.MP4"' in page
+    assert '<video controls preload="none" src="/media/camera_A/CLIP_0002.MP4">' in page
+    assert client.get("/frame/camera_A/CLIP_0002.MP4").content == b"frame"
+    assert client.get("/frame/camera_A/IMG_0001.JPG").status_code == 404
+
+
 def test_review_without_valid_token_is_refused(client):
     response = client.post("/events/camera_A-0001/review", data={"token": "guess", "observation_type": "blank"})
 

@@ -30,6 +30,7 @@
   figure { margin: 0; }
   .frame { position: relative; line-height: 0; }
   .frame img { width: 100%; height: auto; border-radius: 6px; }
+  figure video { width: 100%; margin-top: 6px; border-radius: 6px; background: #000; }
   .box { position: absolute; border: 2px solid var(--box); border-radius: 3px; box-sizing: border-box; }
   .box span { position: absolute; left: -2px; bottom: 100%; background: var(--box); color: var(--box-text);
               font-size: 12px; line-height: 1.4; padding: 0 4px; border-radius: 3px 3px 0 0; white-space: nowrap; }
@@ -106,14 +107,23 @@
   {% for image in images %}
   <figure>
     <div class="frame">
+      {% if image.video %}
+      <img src="/frame/{{ image.media.mediaID }}" alt="Best frame of video {{ image.media.fileName }}">
+      {% else %}
       <img src="/media/{{ image.media.mediaID }}" alt="Image {{ image.media.fileName }}">
+      {% endif %}
       {% for box in image.detections %}
       <div class="box" style="left: {{ box.bboxX | float * 100 }}%; top: {{ box.bboxY | float * 100 }}%; width: {{ box.bboxWidth | float * 100 }}%; height: {{ box.bboxHeight | float * 100 }}%;">
         <span>{{ box.scientificName or box.observationType }}{% if box.classificationProbability %} {{ (box.classificationProbability | float * 100) | round | int }}%{% endif %}</span>
       </div>
       {% endfor %}
     </div>
+    {% if image.video %}
+    <video controls preload="none" src="/media/{{ image.media.mediaID }}"></video>
+    <figcaption>{{ image.media.fileName }} · {{ image.media.timestamp }} · video: the AI's boxes are on its best frame, above</figcaption>
+    {% else %}
     <figcaption>{{ image.media.fileName }} · {{ image.media.timestamp }}</figcaption>
+    {% endif %}
   </figure>
   {% endfor %}
 </section>
