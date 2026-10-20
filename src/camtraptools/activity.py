@@ -20,6 +20,8 @@ OVERLAP_FILE = "overlap.csv"
 PLOT_FILE = "activity.svg"
 DEFAULT_MIN_EVENTS = 20
 GRID_POINTS = 512
+DIRECT_LIMIT = 2_000_000
+BINS = 1440
 MAX_MOMENT = 3
 LARGE_SAMPLE = 75
 BOOTSTRAP_SAMPLES = 999
@@ -86,10 +88,23 @@ def bandwidth(angles: np.ndarray) -> float:
 
 def density(angles: np.ndarray, at: np.ndarray, concentration: float) -> np.ndarray:
     """Return the circular kernel density of ``angles`` at the angles ``at``, per
-    radian, so that it integrates to 1 over the day."""
-    differences = np.cos(at[:, None] - angles[None, :]) - 1
-    kernels = np.exp(concentration * differences) / (2 * math.pi * scaled_bessel(0, concentration))
-    return kernels.mean(axis=1)
+    radian, so that it integrates to 1 over the day.
+
+    Small samples are computed exactly. For large ones (more than
+    ``DIRECT_LIMIT`` kernel evaluations), times are counted in one-minute bins, the
+    kernel is applied to the bins with a fast Fourier transform, and the result is
+    interpolated, which is far faster and differs negligibly.
+    """
+    normalizer = 2 * math.pi * scaled_bessel(0, concentration)
+    if len(angles) * len(at) <= DIRECT_LIMIT:
+        differences = np.cos(at[:, None] - angles[None, :]) - 1
+        return (np.exp(concentration * differences) / normalizer).mean(axis=1)
+    step = 2 * math.pi / BINS
+    counts = np.bincount(np.floor(np.mod(angles, 2 * math.pi) / step).astype(int) % BINS, minlength=BINS)
+    centres = (np.arange(BINS) + 0.5) * step
+    kernel = np.exp(concentration * (np.cos(np.arange(BINS) * step) - 1)) / normalizer
+    smoothed = np.fft.irfft(np.fft.rfft(counts / len(angles)) * np.fft.rfft(kernel), n=BINS)
+    return np.interp(np.mod(at, 2 * math.pi), centres, smoothed, period=2 * math.pi)
 
 
 def grid() -> np.ndarray:

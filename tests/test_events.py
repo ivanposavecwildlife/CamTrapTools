@@ -138,3 +138,32 @@ def test_run_adds_event_ids_and_event_observations(tmp_path):
     assert list(saved["observationLevel"]) == ["media"] * 3 + ["event"] * 2
     assert list(saved["eventID"]) == ["camera_A-0001", "camera_A-0001", "camera_A-0002", "camera_A-0001", "camera_A-0002"]
     assert (tmp_path / "observations.csv").read_text(encoding="utf-8").splitlines()[1].split(",")[10] == "1"
+
+
+def test_summarize_event_without_probabilities_counts_images():
+    observations = make_observations(
+        ("m1", "animal", "Oryx gazella", 0.0),
+        ("m2", "animal", "Vulpes chama", 0.0),
+        ("m3", "animal", "Vulpes chama", None),
+    )
+
+    event = events.summarize_event("camera_A-0001", observations)
+
+    assert event["scientificName"] == "Vulpes chama"
+    assert event["classificationProbability"] == round(2 / 3, 3)
+
+
+def test_build_event_observations_summarizes_many_events_at_once():
+    observations = make_observations(
+        ("m1", "animal", "Oryx gazella", 0.9),
+        ("m2", "human", None, 0.8),
+        ("m3", "blank", None, None),
+        ("m4", "animal", "Vulpes chama", 0.4),
+    )
+    observations["eventID"] = ["cam-0002", "cam-0001", "cam-0001", "cam-0003"]
+
+    built = events.build_event_observations(observations).set_index("eventID")
+
+    assert built["observationType"].to_dict() == {"cam-0001": "human", "cam-0002": "animal", "cam-0003": "animal"}
+    assert built.loc["cam-0003", "scientificName"] == "Vulpes chama"
+    assert built.loc["cam-0001", "count"] == 1

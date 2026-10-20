@@ -110,3 +110,16 @@ def test_run_without_enough_events(tmp_path):
 
     assert peaks.empty and pairs.empty
     assert not (tmp_path / activity.PLOT_FILE).exists()
+
+
+def test_density_for_large_samples_matches_the_exact_one(monkeypatch):
+    angles = np.concatenate([von_mises(1.5, 4, 300, 1), von_mises(4.8, 3, 300, 2)])
+    points = activity.grid()
+    concentration = activity.bandwidth(angles)
+    exact = activity.density(angles, points, concentration)
+
+    monkeypatch.setattr(activity, "DIRECT_LIMIT", 0)
+    binned = activity.density(angles, points, concentration)
+
+    assert np.abs(binned - exact).max() < 0.002 * exact.max()
+    assert binned.mean() * 2 * math.pi == pytest.approx(1, abs=1e-3)

@@ -13,6 +13,7 @@ Expected input layout, one subdirectory per deployment:
 """
 
 import re
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
@@ -85,15 +86,48 @@ MEDIA_COLUMNS = [
 ]
 
 
-def build_media(images_dir: Path) -> pd.DataFrame:
-    """Return one row per image; each top-level subfolder of ``images_dir`` is one deployment."""
+def deployment_folders(images_dir: Path, depth: int = 1) -> list[tuple[str, Path]]:
+    """Return the deployment ID and folder of every deployment: the folders ``depth``
+    levels below ``images_dir``, skipping hidden ones. With a depth of 2,
+    ``north/camera_A`` becomes the deployment ``north_camera_A``."""
+    folders = [images_dir]
+    for _ in range(depth):
+        folders = [
+            child
+            for folder in folders
+            for child in sorted(folder.iterdir())
+            if child.is_dir() and not child.name.startswith(".")
+        ]
+    return [("_".join(folder.relative_to(images_dir).parts), folder) for folder in folders]
+
+
+def build_media(images_dir: Path, depth: int = 1) -> pd.DataFrame:
+    """Return one row per image in the deployment folders of ``images_dir`` (see
+    ``deployment_folders``)."""
     rows = []
-    for deployment_dir in sorted(images_dir.iterdir()):
-        if not deployment_dir.is_dir() or deployment_dir.name.startswith("."):
-            continue
+    for deployment_id, deployment_dir in deployment_folders(images_dir, depth):
         for image_path in find_images(deployment_dir):
-            rows.append(media_row(image_path, images_dir, deployment_dir.name))
+            rows.append(media_row(image_path, images_dir, deployment_id))
     return pd.DataFrame(rows, columns=MEDIA_COLUMNS)
+
+
+OUTSIDE_DEPLOYMENTS = "JPEG outside deployment folders"
+
+
+def skipped_files(images_dir: Path, depth: int = 1) -> Counter:
+    """Return the files under ``images_dir`` that ``build_media`` does not read, counted
+    by extension (such as ``.mp4`` videos), and JPEG images that are not inside a
+    deployment folder. Hidden files and folders are not counted."""
+    deployments = {folder for _, folder in deployment_folders(images_dir, depth)}
+    skipped = Counter()
+    for path in images_dir.rglob("*"):
+        if not path.is_file() or any(part.startswith(".") for part in path.relative_to(images_dir).parts):
+            continue
+        if not is_image(path):
+            skipped[path.suffix.lower() or "(no extension)"] += 1
+        elif not deployments.intersection(path.parents):
+            skipped[OUTSIDE_DEPLOYMENTS] += 1
+    return skipped
 
 
 def build_deployments(media: pd.DataFrame) -> pd.DataFrame:
@@ -112,14 +146,15 @@ TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
 
 def run(
-    images_dir: Path, out_dir: Path, field_sheet: Path | None = None
+    images_dir: Path, out_dir: Path, field_sheet: Path | None = None, depth: int = 1
 ) -> tuple[pd.DataFrame, pd.DataFrame, list[str]]:
     """Build the media and deployments tables, merge the optional field sheet,
-    check it, and write the tables as CSV files to ``out_dir``.
+    check it, and write the tables as CSV files to ``out_dir``. Deployments are the
+    folders ``depth`` levels below ``images_dir``.
 
     Returns the two tables and a list of field-sheet issues.
     """
-    media = build_media(images_dir)
+    media = build_media(images_dir, depth)
     deployments = build_deployments(media)
     issues = []
     if field_sheet is not None:

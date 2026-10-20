@@ -31,7 +31,7 @@ def test_ingest_command_reports_counts(make_image, tmp_path):
     )
 
     assert result.exit_code == 0
-    assert "Found 1 images from 1 deployments." in result.output
+    assert "Found 1 image from 1 deployment." in result.output
     assert (tmp_path / "package/deployments.csv").exists()
 
 
@@ -683,3 +683,19 @@ def test_compare_command_checks_other_packages(tmp_path):
 
     assert result.exit_code == 2
     assert "NAME=PACKAGE" in result.output
+
+
+def test_ingest_command_reports_skipped_files_and_reads_nested_folders(make_image, tmp_path):
+    make_image("images/north/camera_A/IMG_0001.JPG", date_time_original="2024:03:01 06:00:00")
+    (tmp_path / "images/north/camera_A/IMG_0002.MP4").write_bytes(b"video")
+    make_image("images/north/IMG_0003.JPG")
+
+    result = runner.invoke(
+        app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package"), "--folder-depth", "2"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Found 1 image from 1 deployment." in result.output
+    assert "Skipped 1 file that is not a JPEG image: .mp4 (1)" in result.output
+    assert "Skipped 1 JPEG image not inside a deployment folder" in result.output
+    assert pd.read_csv(tmp_path / "package" / "deployments.csv")["deploymentID"].tolist() == ["north_camera_A"]

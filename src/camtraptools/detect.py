@@ -6,6 +6,7 @@ needs the optional ``detect`` extra, which installs the ``speciesnet`` package
 (Apache-2.0). Its MegaDetector inference code is GPL-licensed.
 """
 
+import hashlib
 import json
 from datetime import datetime
 from pathlib import Path
@@ -19,6 +20,42 @@ CATEGORIES = ["animal", "human", "vehicle"]
 SPECIAL_LABELS = {"animal": "animal", "blank": "blank", "human": "human", "vehicle": "vehicle", "no cv result": "unknown"}
 
 
+PARTIAL_FILE = "speciesnet.partial.json"
+PARTIAL_SETTINGS_FILE = "speciesnet.partial.settings.json"
+
+
+def run_settings(media: pd.DataFrame, images_dir: Path, model: str, country, admin1_region) -> dict:
+    """Return what a SpeciesNet run depends on, so saved progress is only reused for
+    exactly the same run: the model, region, images folder and list of images."""
+    files = sorted(media["filePath"])
+    return {
+        "model": model,
+        "country": country,
+        "admin1_region": admin1_region,
+        "images": str(images_dir.resolve()),
+        "imageCount": len(files),
+        "imageList": hashlib.sha256("\n".join(files).encode("utf-8")).hexdigest(),
+    }
+
+
+def saved_progress(package_dir: Path, settings: dict) -> int:
+    """Return how many images an interrupted SpeciesNet run with the same settings has
+    already saved, after deleting saved progress from a run with other settings."""
+    partial = package_dir / PARTIAL_FILE
+    settings_file = package_dir / PARTIAL_SETTINGS_FILE
+    if not partial.exists():
+        return 0
+    if not settings_file.exists() or json.loads(settings_file.read_text(encoding="utf-8")) != settings:
+        partial.unlink()
+        settings_file.unlink(missing_ok=True)
+        return 0
+    try:
+        return len(json.loads(partial.read_text(encoding="utf-8")).get("predictions", []))
+    except json.JSONDecodeError:
+        partial.unlink()
+        return 0
+
+
 def run(
     package_dir: Path,
     images_dir: Path,
@@ -27,7 +64,11 @@ def run(
     admin1_region: str | None = None,
 ) -> Path:
     """Run SpeciesNet on every image in the package and save its predictions as
-    ``speciesnet.json`` in the package, with paths relative to ``images_dir``."""
+    ``speciesnet.json`` in the package, with paths relative to ``images_dir``.
+
+    SpeciesNet saves its progress every 10 minutes in ``speciesnet.partial.json``; if a
+    run is interrupted, running it again with the same settings continues from there.
+    """
     try:
         from speciesnet import SpeciesNet
     except ImportError as error:
@@ -35,10 +76,24 @@ def run(
             "Detection needs the optional 'detect' extra. Install it with: uv sync --extra detect"
         ) from error
     media = pd.read_csv(package_dir / "media.csv")
+    settings = run_settings(media, images_dir, model, country, admin1_region)
+    saved_progress(package_dir, settings)
+    partial = package_dir / PARTIAL_FILE
+    (package_dir / PARTIAL_SETTINGS_FILE).write_text(json.dumps(settings), encoding="utf-8")
     image_files = [str(images_dir / file_path) for file_path in media["filePath"]]
-    predictions = SpeciesNet(model).predict(filepaths=image_files, country=country, admin1_region=admin1_region)
-    for prediction, file_path in zip(predictions["predictions"], media["filePath"], strict=True):
-        prediction["filepath"] = file_path
+    SpeciesNet(model).predict(
+        filepaths=image_files,
+        country=country,
+        admin1_region=admin1_region,
+        predictions_json=str(partial),
+        progress_bars=True,
+    )
+    predictions = json.loads(partial.read_text(encoding="utf-8"))
+    by_file = {prediction["filepath"]: prediction for prediction in predictions["predictions"]}
+    predictions["predictions"] = [
+        {**by_file[image_file], "filepath": file_path}
+        for image_file, file_path in zip(image_files, media["filePath"], strict=True)
+    ]
     predictions["info"] = {
         **predictions.get("info", {}),
         "model": model,
@@ -48,6 +103,8 @@ def run(
     }
     results_file = package_dir / RESULTS_FILE
     results_file.write_text(json.dumps(predictions, indent=1), encoding="utf-8")
+    partial.unlink()
+    (package_dir / PARTIAL_SETTINGS_FILE).unlink(missing_ok=True)
     return results_file
 
 

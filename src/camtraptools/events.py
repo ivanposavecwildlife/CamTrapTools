@@ -24,45 +24,61 @@ def assign_events(media: pd.DataFrame, gap_minutes: float = DEFAULT_GAP_MINUTES)
     return event_ids.reindex(media.index)
 
 
-def summarize_event(event_id: str, observations: pd.DataFrame) -> dict:
-    """Return the event-level observation for one event's media-level observations.
+def summarize_all(observations: pd.DataFrame) -> pd.DataFrame:
+    """Return one event-level observation per event in the media-level
+    ``observations``, computed for all events at once.
 
     The event type is the most important type seen (animal before human, vehicle,
-    unknown and blank). For animals, the species with the highest summed
-    classifier probability wins, and the count is the largest number of animals
-    in any single image.
+    unknown and blank). For animals, the species with the highest summed classifier
+    probability wins (or the most images, if no image has a probability), and the
+    count is the largest number of animals in any single image.
     """
-    observation_type = next(t for t in TYPE_PRIORITY if (observations["observationType"] == t).any())
-    event = {
-        "observationID": f"{event_id}-event",
-        "deploymentID": observations["deploymentID"].iloc[0],
-        "eventID": event_id,
-        "eventStart": observations["eventStart"].min(),
-        "eventEnd": observations["eventEnd"].max(),
-        "observationLevel": "event",
-        "observationType": observation_type,
-        "classificationMethod": "machine",
-        "classifiedBy": observations["classifiedBy"].iloc[0],
-        "classificationTimestamp": observations["classificationTimestamp"].iloc[0],
-    }
-    matching = observations[observations["observationType"] == observation_type]
-    if observation_type in ("animal", "human", "vehicle"):
-        event["count"] = matching.groupby("mediaID").size().max()
-    if observation_type == "animal":
-        probability = pd.to_numeric(matching["classificationProbability"])
-        votes = probability.groupby(matching["scientificName"].fillna("")).sum()
-        event["scientificName"] = votes.idxmax() or None
-        event["classificationProbability"] = round(votes.max() / votes.sum(), 3)
-    return event
+    rows = observations.dropna(subset=["eventID"]).copy()
+    priority = {name: rank for rank, name in enumerate(TYPE_PRIORITY)}
+    rows["rank"] = rows["observationType"].map(priority).fillna(priority["unknown"])
+    rows["eventRank"] = rows.groupby("eventID")["rank"].transform("min")
+    first = rows.drop_duplicates("eventID").set_index("eventID")
+    events = pd.DataFrame(index=first.index.sort_values())
+    events["observationID"] = events.index + "-event"
+    events["deploymentID"] = first["deploymentID"]
+    events["eventID"] = events.index
+    events["eventStart"] = rows.groupby("eventID")["eventStart"].min()
+    events["eventEnd"] = rows.groupby("eventID")["eventEnd"].max()
+    events["observationLevel"] = "event"
+    events["observationType"] = rows.groupby("eventID")["eventRank"].first().astype(int).map(dict(enumerate(TYPE_PRIORITY)))
+    events["classificationMethod"] = "machine"
+    events["classifiedBy"] = first["classifiedBy"]
+    events["classificationTimestamp"] = first["classificationTimestamp"]
+
+    matching = rows[rows["rank"] == rows["eventRank"]]
+    counted = matching[matching["observationType"].isin(["animal", "human", "vehicle"])]
+    events["count"] = counted.groupby(["eventID", "mediaID"]).size().groupby(level=0).max()
+
+    animals = matching[matching["observationType"] == "animal"]
+    if not animals.empty:
+        keys = [animals["eventID"], animals["scientificName"].fillna("")]
+        votes = pd.to_numeric(animals["classificationProbability"], errors="coerce").fillna(0).groupby(keys).sum()
+        totals = votes.groupby(level=0).transform("sum")
+        images = animals.groupby(keys).size()
+        votes = votes.where(totals > 0, images)
+        winners = votes.groupby(level=0).idxmax()
+        events["scientificName"] = winners.map(lambda key: key[1] or None)
+        events["classificationProbability"] = (votes.groupby(level=0).max() / votes.groupby(level=0).sum()).round(3)
+    events = events.reset_index(drop=True).reindex(columns=OBSERVATION_COLUMNS)
+    events["count"] = events["count"].astype("Int64")
+    return events
+
+
+def summarize_event(event_id: str, observations: pd.DataFrame) -> dict:
+    """Return the event-level observation for one event's media-level observations
+    (see ``summarize_all``), with missing values as ``None``."""
+    event = summarize_all(observations.assign(eventID=event_id)).iloc[0].to_dict()
+    return {key: None if pd.isna(value) else value for key, value in event.items()}
 
 
 def build_event_observations(observations: pd.DataFrame) -> pd.DataFrame:
     """Return one event-level observation per event in the media-level ``observations``."""
-    with_event = observations.dropna(subset=["eventID"])
-    rows = [summarize_event(event_id, group) for event_id, group in with_event.groupby("eventID")]
-    events = pd.DataFrame(rows, columns=OBSERVATION_COLUMNS)
-    events["count"] = events["count"].astype("Int64")
-    return events
+    return summarize_all(observations)
 
 
 def summarize_events(events: pd.DataFrame) -> pd.DataFrame:

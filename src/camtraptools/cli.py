@@ -52,7 +52,7 @@ def ingest_cmd(
         typer.Argument(
             exists=True,
             file_okay=False,
-            help="Folder of SD-card images, one subfolder per camera.",
+            help="Folder of SD-card images, one subfolder per camera (see --folder-depth).",
         ),
     ],
     out: Annotated[
@@ -66,14 +66,33 @@ def ingest_cmd(
             help="CSV or Excel field sheet with coordinates and camera details.",
         ),
     ] = None,
+    folder_depth: Annotated[
+        int,
+        typer.Option(
+            min=1,
+            help="Folder level that holds one deployment each, e.g. 2 for site/camera/ (deployment site_camera).",
+        ),
+    ] = 1,
 ) -> None:
     """Scan images and build deployments.csv and media.csv."""
     try:
-        media, deployments, issues = ingest.run(images, out, field_sheet)
+        media, deployments, issues = ingest.run(images, out, field_sheet, folder_depth)
     except ValueError as error:
         typer.echo(f"Error: {error}", err=True)
         raise typer.Exit(1)
-    typer.echo(f"Found {len(media)} images from {len(deployments)} deployments.")
+    typer.echo(f"Found {crops.plural(len(media), 'image')} from {crops.plural(len(deployments), 'deployment')}.")
+    skipped = ingest.skipped_files(images, folder_depth)
+    outside = skipped.pop(ingest.OUTSIDE_DEPLOYMENTS, 0)
+    if skipped:
+        kinds = ", ".join(f"{kind} ({count})" for kind, count in skipped.most_common())
+        count = sum(skipped.values())
+        what = "1 file that is not a JPEG image" if count == 1 else f"{count} files that are not JPEG images"
+        typer.echo(f"Skipped {what}: {kinds}")
+    if outside:
+        typer.echo(
+            f"Skipped {crops.plural(outside, 'JPEG image')} not inside a deployment folder; "
+            f"check the folder layout or --folder-depth (now {folder_depth})."
+        )
     if issues:
         typer.echo(f"{len(issues)} field-sheet issue(s):")
         for issue in issues:
@@ -191,6 +210,12 @@ def detect_cmd(
         if images is None:
             typer.echo("Error: --images is required to run SpeciesNet.", err=True)
             raise typer.Exit(1)
+        media = pd.read_csv(package / "media.csv")
+        done = detect.saved_progress(package, detect.run_settings(media, images, model, country, admin1_region))
+        if done:
+            typer.echo(f"Continuing an interrupted run: {done} of {crops.plural(len(media), 'image')} already done.")
+        else:
+            typer.echo(f"Running SpeciesNet on {crops.plural(len(media), 'image')}; progress is saved every 10 minutes.")
         try:
             results_file = detect.run(package, images, model, country, admin1_region)
         except RuntimeError as error:

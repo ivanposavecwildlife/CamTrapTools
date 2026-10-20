@@ -1,6 +1,7 @@
 import json
 import sys
 import types
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -193,15 +194,26 @@ def test_run_explains_missing_extra(monkeypatch, tmp_path):
         detect.run(tmp_path, tmp_path)
 
 
-def fake_speciesnet(monkeypatch, calls):
+def fake_speciesnet(monkeypatch, calls, stop_after=None):
+    """Stand in for SpeciesNet, saving and resuming progress in predictions_json as it
+    does. With ``stop_after``, it saves that many images and then fails."""
+
     class SpeciesNet:
         def __init__(self, model):
             calls["model"] = model
 
-        def predict(self, filepaths, country, admin1_region):
+        def predict(self, filepaths, country, admin1_region, predictions_json, progress_bars):
             calls.update(filepaths=filepaths, country=country, admin1_region=admin1_region)
-            predictions = [{"filepath": file, "detections": [], "model_version": "4.0.3a"} for file in filepaths]
-            return {"info": {"format_version": "20261015"}, "predictions": predictions}
+            path = Path(predictions_json)
+            saved = json.loads(path.read_text())["predictions"] if path.exists() else []
+            done = {prediction["filepath"] for prediction in saved}
+            calls["processed"] = [file for file in filepaths if file not in done]
+            for file in calls["processed"]:
+                if stop_after is not None and len(saved) >= stop_after:
+                    path.write_text(json.dumps({"predictions": saved}))
+                    raise KeyboardInterrupt
+                saved.append({"filepath": file, "detections": [], "model_version": "4.0.3a"})
+            path.write_text(json.dumps({"info": {"format_version": "20261015"}, "predictions": saved}))
 
     module = types.ModuleType("speciesnet")
     module.SpeciesNet = SpeciesNet
@@ -224,3 +236,40 @@ def test_run_processes_exactly_the_ingested_images(make_image, monkeypatch, tmp_
     assert results["predictions"][0]["filepath"] == "camera_A/DCIM/IMG_0001.JPG"
     assert results["info"]["country"] == "ZAF"
     assert detect.has_results(results_file, detect.DEFAULT_MODEL, "ZAF")
+
+
+def test_run_continues_an_interrupted_run(make_image, monkeypatch, tmp_path):
+    for number in range(1, 5):
+        make_image(f"images/camera_A/IMG_000{number}.JPG", date_time_original=f"2024:03:01 0{number}:00:00")
+    ingest(tmp_path / "images", tmp_path / "package")
+    calls = {}
+    fake_speciesnet(monkeypatch, calls, stop_after=2)
+    with pytest.raises(KeyboardInterrupt):
+        detect.run(tmp_path / "package", tmp_path / "images")
+    media = pd.read_csv(tmp_path / "package" / "media.csv")
+    settings = detect.run_settings(media, tmp_path / "images", detect.DEFAULT_MODEL, None, None)
+    assert detect.saved_progress(tmp_path / "package", settings) == 2
+
+    fake_speciesnet(monkeypatch, calls)
+    results_file = detect.run(tmp_path / "package", tmp_path / "images")
+
+    assert len(calls["processed"]) == 2
+    predictions = json.loads(results_file.read_text(encoding="utf-8"))["predictions"]
+    assert [prediction["filepath"] for prediction in predictions] == list(media["filePath"])
+    assert not (tmp_path / "package" / detect.PARTIAL_FILE).exists()
+    assert not (tmp_path / "package" / detect.PARTIAL_SETTINGS_FILE).exists()
+
+
+def test_saved_progress_from_other_settings_is_discarded(make_image, monkeypatch, tmp_path):
+    make_image("images/camera_A/IMG_0001.JPG", date_time_original="2024:03:01 06:00:00")
+    make_image("images/camera_A/IMG_0002.JPG", date_time_original="2024:03:01 07:00:00")
+    ingest(tmp_path / "images", tmp_path / "package")
+    fake_speciesnet(monkeypatch, {}, stop_after=1)
+    with pytest.raises(KeyboardInterrupt):
+        detect.run(tmp_path / "package", tmp_path / "images", country="ZAF")
+    media = pd.read_csv(tmp_path / "package" / "media.csv")
+
+    other = detect.run_settings(media, tmp_path / "images", detect.DEFAULT_MODEL, "KEN", None)
+
+    assert detect.saved_progress(tmp_path / "package", other) == 0
+    assert not (tmp_path / "package" / detect.PARTIAL_FILE).exists()

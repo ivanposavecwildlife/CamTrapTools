@@ -8,9 +8,29 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `detect` saves SpeciesNet's progress every 10 minutes and continues an interrupted
+  run when the same command is run again, discarding saved progress from a run with
+  other settings; it shows SpeciesNet's progress bars.
+- `ingest --folder-depth` reads deployments from deeper folder levels, such as
+  `site/camera/` (deployment `site_camera`).
+- `ingest` reports the files it skipped by type, such as videos, and JPEG images
+  outside any deployment folder.
 - User guide (`docs/user-guide.md`): installation, preparing images and field sheets,
   every step from `ingest` to `export` with example output and how to read it, choosing
   a workflow, the files in a package, troubleshooting and a command reference.
+
+### Changed
+
+- `events` summarises all events at once: 100,000 images now take about a second
+  instead of more than ten minutes, with identical results.
+- Activity curves of species with many events are computed from one-minute bins with
+  a fast Fourier transform, so `ecology` handles thousands of events per species in
+  seconds; smaller samples are computed exactly as before.
+
+### Fixed
+
+- An event whose images all had a classifier probability of 0 got no confidence; its
+  species is now chosen by the number of images.
 
 ## [0.5.0] - 2026-10-20
 

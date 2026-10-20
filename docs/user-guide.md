@@ -137,11 +137,28 @@ sd_cards/
 └── camera_C/IMG_0001.JPG …
 ```
 
-- Only JPEG images (`.jpg`, `.jpeg`) are read. Videos are ignored.
+- Only JPEG images (`.jpg`, `.jpeg`) are read. Videos and other files are skipped,
+  and `ingest` says how many of each kind it skipped.
 - Folder names become deployment IDs, so use short names without spaces, such as
   `A02` or `north_ridge_2024`.
 - Keep the original files. CamTrapTools never changes or moves images; it only reads
   them.
+
+If your cards are organised one level deeper, for example by site and then camera,
+tell `ingest` which level holds one deployment each with `--folder-depth`:
+
+```
+sd_cards/
+├── north/camera_A/…   →  deployment north_camera_A
+└── south/camera_A/…   →  deployment south_camera_A
+```
+
+```bash
+camtraptools ingest sd_cards --out my_survey --folder-depth 2
+```
+
+The deployment ID joins the folder names with `_`; use the same IDs in the field
+sheet.
 
 ### Field sheet (recommended)
 
@@ -196,6 +213,10 @@ If the field sheet has problems, `ingest` lists them, for example:
 
 Fix the sheet and run `ingest` again; it overwrites the two tables and never touches
 later results.
+
+`ingest` also reports files it did not read, such as
+`Skipped 118 files that are not JPEG images: .mp4 (118)`, and JPEG images that are not
+inside a deployment folder, which usually means `--folder-depth` needs changing.
 
 ## Step 2: check the cameras (`check`, `report`)
 
@@ -283,6 +304,17 @@ steenbok               0    1    0    2
 …
 Wrote my_survey/speciesnet.json and my_survey/observations.csv (203 observations)
 ```
+
+**Long runs.** SpeciesNet processes about 2 images per second on a laptop, so a large
+survey can take many hours. Progress is saved every 10 minutes. If the run stops (the
+laptop sleeps, the terminal closes), run the same command again and it continues:
+
+```
+Continuing an interrupted run: 41250 of 100000 images already done.
+```
+
+On a Mac, `caffeinate -i camtraptools detect …` keeps the computer awake during the
+run.
 
 **Detection threshold.** Detections below 0.2 confidence are ignored. A higher
 threshold (`--threshold 0.4`) removes false detections on empty images but misses more
@@ -695,13 +727,15 @@ original answer next to yours.
 | Many "Bovidae" or "animal" events | Normal for distant or night images; review them, or adapt the AI |
 | `deployments without coordinates` on export | Add `latitude` and `longitude` to the field sheet and run `ingest` again |
 | Occupancy shows "detection too rare to estimate" | The survey recorded the species too rarely; report naive occupancy with that caveat, or survey longer or with more cameras |
-| Images missing from `media.csv` | Only `.jpg`/`.jpeg` files are read, and hidden files (starting with `.`) are skipped |
+| Images missing from `media.csv` | Only `.jpg`/`.jpeg` files are read, and hidden files (starting with `.`) are skipped; `ingest` reports what it skipped |
+| `ingest` finds one deployment per site instead of per camera | Your cards are organised in more levels; use `--folder-depth 2` |
+| `detect` stopped halfway | Run the same command again; it continues from the last save |
 
 ## Command reference
 
 | Command | Purpose | Main options |
 |---|---|---|
-| `ingest IMAGES` | Build the package | `--out`, `--field-sheet` |
+| `ingest IMAGES` | Build the package | `--out`, `--field-sheet`, `--folder-depth` |
 | `check PACKAGE` | Camera problems | `--max-gap-days` |
 | `report PACKAGE` | HTML health report | `--out`, `--max-gap-days` |
 | `detect PACKAGE` | Run SpeciesNet | `--images`, `--country`, `--admin1-region`, `--threshold`, `--rerun`, `--adapted`, `--adapted-threshold`, `--model` |
