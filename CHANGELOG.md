@@ -8,6 +8,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `labels` command: imports existing image labels from a Camtrap DP package (human
+  classifications first; event-level observations label every image in the event), a
+  Wildlife Insights `images.csv` export (with its taxonomy), a Timelapse CSV export or
+  any CSV (`--species-column`, `--path-column`, `--file-column`, `--folder-column`), and
+  writes a truth file for `evaluate`, `crops` and `compare`. Images are matched by path,
+  without leading folders, then by unique file name; common names are turned into
+  scientific names with SpeciesNet's taxonomy when its model is downloaded, or with a
+  `--names` mapping; blank labels are recognised, and unmatched, ambiguous and
+  unrecognised labels are reported.
 - Clock correction: optional `cameraTime` and `actualTime` field-sheet columns (what a
   camera's clock showed and the real time at that moment) make `ingest` shift all of
   that deployment's image times by the difference before deployment periods are

@@ -74,6 +74,10 @@ flash (`cam_noflash`) and clock errors.*
 
   ![Review app showing a camera event with the AI's boxes and a human correction](docs/review.jpg)
 
+- **`labels`**: imports labels you already have, from Timelapse, Wildlife Insights,
+  another Camtrap DP package or any spreadsheet, as a truth file for `evaluate`, `crops`
+  and `compare`. It matches images even when paths differ and turns common names into
+  scientific names.
 - **`evaluate`**: measures the AI against your reviews or a file of true labels:
   precision and recall per species, the confidence above which each species' answers
   can be trusted, and an HTML report of every mistake with its images.

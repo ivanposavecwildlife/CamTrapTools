@@ -21,6 +21,7 @@ from camtraptools import (
     export,
     importer,
     ingest,
+    labels,
     report,
     review,
 )
@@ -814,3 +815,73 @@ def compare_cmd(
         f"\nWrote {out / compare.SCORES_FILE}, {out / compare.COMPARISON_FILE}, "
         f"{out / compare.OVERLAP_COMPARISON_FILE} and one folder per source"
     )
+
+
+@app.command("labels")
+def labels_cmd(
+    package: Annotated[
+        Path, typer.Argument(exists=True, file_okay=False, help="Camtrap DP package folder made by `ingest`.")
+    ],
+    source: Annotated[
+        Path,
+        typer.Argument(
+            exists=True,
+            help="Existing labels: a Camtrap DP package folder, a Wildlife Insights images.csv, or a CSV (e.g. Timelapse).",
+        ),
+    ],
+    out: Annotated[Path, typer.Option(help="Truth file to write, for evaluate, crops and compare.")] = Path(
+        "labels.csv"
+    ),
+    source_format: Annotated[
+        str, typer.Option("--format", help="auto, camtrap-dp, wildlife-insights or csv.")
+    ] = "auto",
+    species_column: Annotated[
+        str | None, typer.Option(help="CSV column with the species or label, e.g. Species.")
+    ] = None,
+    path_column: Annotated[str | None, typer.Option(help="CSV column with the image path.")] = None,
+    file_column: Annotated[
+        str | None, typer.Option(help="CSV column with the image file name (default: File, as in Timelapse).")
+    ] = None,
+    folder_column: Annotated[
+        str | None, typer.Option(help="CSV column with the image folder (default: RelativePath, as in Timelapse).")
+    ] = None,
+    names: Annotated[
+        Path | None,
+        typer.Option(exists=True, dir_okay=False, help="CSV mapping your labels to scientific names (label, scientificName)."),
+    ] = None,
+) -> None:
+    """Import existing image labels (Camtrap DP, Wildlife Insights, Timelapse or any CSV) as a truth file."""
+    if source_format not in labels.FORMATS:
+        typer.echo(f"Error: --format must be one of {', '.join(labels.FORMATS)}.", err=True)
+        raise typer.Exit(1)
+    if not (package / "media.csv").exists():
+        typer.echo(f"Error: no media.csv in {package}; run `camtraptools ingest` first.", err=True)
+        raise typer.Exit(1)
+    try:
+        summary = labels.run(
+            package, source, out, source_format, species_column, path_column, file_column, folder_column, names
+        )
+    except (ValueError, KeyError) as error:
+        typer.echo(f"Error: {error}", err=True)
+        raise typer.Exit(1) from error
+    typer.echo(
+        f"Read {crops.plural(summary['rows'], 'label')} ({summary['format']}); matched "
+        f"{summary['matched']} of the package's {crops.plural(summary['packageImages'], 'image')}."
+    )
+    if summary["missing"]:
+        typer.echo(f"  {crops.plural(summary['missing'], 'label')} matched no image in the package")
+    if summary["ambiguous"]:
+        typer.echo(
+            f"  {crops.plural(summary['ambiguous'], 'label')} matched several images with the same file name; "
+            "give a path column to tell them apart"
+        )
+    if summary["matched"]:
+        typer.echo("\nImages per label:")
+        for label, count in summary["labels"].head(20).items():
+            typer.echo(f"  {label}: {count}")
+    if summary["unknown"]:
+        typer.echo(
+            f"\n⚠ Not recognised as a scientific or common name: {', '.join(summary['unknown'][:10])}. "
+            "Map them with --names (columns label, scientificName)."
+        )
+    typer.echo(f"\nWrote {out}; use it with --truth in evaluate, crops and compare.")

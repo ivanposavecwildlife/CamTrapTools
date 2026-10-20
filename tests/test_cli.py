@@ -718,3 +718,37 @@ def test_ingest_command_reports_clock_corrections(make_image, tmp_path):
     assert result.exit_code == 0, result.output
     assert "Corrected the clock of cam_reset by +5173 days 8:00:00." in result.output
     assert "before 2010" not in checked.output
+
+
+def test_labels_command_imports_a_csv(make_image, monkeypatch, tmp_path):
+    monkeypatch.setattr("camtraptools.labels.speciesnet_taxonomy", lambda: None)
+    make_image("images/camera_A/IMG_0001.JPG", date_time_original="2024:03:01 06:00:00")
+    make_image("images/camera_A/IMG_0002.JPG", date_time_original="2024:03:01 06:01:00")
+    runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")])
+    source = tmp_path / "sheet.csv"
+    source.write_text("image,what\ncamera_A/IMG_0001.JPG,Vulpes chama\nother/IMG_0009.JPG,Vulpes chama\n")
+
+    result = runner.invoke(
+        app,
+        [
+            "labels", str(tmp_path / "package"), str(source), "--out", str(tmp_path / "truth.csv"),
+            "--species-column", "what", "--path-column", "image",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Read 2 labels (csv); matched 1 of the package's 2 images." in result.output
+    assert "1 label matched no image in the package" in result.output
+    assert "Vulpes chama: 1" in result.output
+
+
+def test_labels_command_explains_missing_species_column(make_image, tmp_path):
+    make_image("images/camera_A/IMG_0001.JPG")
+    runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package")])
+    source = tmp_path / "sheet.csv"
+    source.write_text("image,what\ncamera_A/IMG_0001.JPG,fox\n")
+
+    result = runner.invoke(app, ["labels", str(tmp_path / "package"), str(source)])
+
+    assert result.exit_code == 1
+    assert "--species-column" in result.output

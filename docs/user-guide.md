@@ -452,6 +452,44 @@ A02/A02_R1/IMG_0012.JPG,,,,,
 
 Without `--truth`, your reviews are the reference.
 
+### Already have labels?
+
+If the images were labelled before, in Timelapse, Wildlife Insights or another Camtrap
+DP tool such as Agouti or Trapper, `labels` turns them into this truth file:
+
+```bash
+camtraptools labels my_survey old_labels.csv --species-column Species --out labels.csv
+```
+
+```
+Read 186 labels (csv); matched 186 of the package's 194 images.
+
+Images per label:
+  Oryx gazella: 74
+  blank: 70
+  Canis mesomelas: 15
+  Sylvicapra grimmia: 10
+  …
+
+⚠ Not recognised as a scientific or common name: Mystery raptor. Map them with --names (columns label, scientificName).
+```
+
+| Source | How to give it |
+|---|---|
+| Camtrap DP package | the package folder; human classifications are used if there are any |
+| Wildlife Insights | the `images.csv` from the project's export |
+| Timelapse | the exported CSV with `--species-column` (the name of your species field); `RelativePath` and `File` are read automatically |
+| Any other spreadsheet | `--species-column` and either `--path-column`, or `--file-column` with `--folder-column` |
+
+- Images are matched by path even if the labels were made on another computer or drive,
+  and otherwise by file name.
+- Common names are turned into scientific names (`Black-backed jackal` →
+  *Canis mesomelas*) using SpeciesNet's taxonomy once `detect` has downloaded it.
+  Other names can be mapped with `--names`, a CSV with `label` and `scientificName`
+  columns.
+- Labels such as "Empty", "Blank" or "Nothing" mean an empty image; rows with no label
+  are treated as not yet labelled and left out.
+
 ```
 Compared 60 events with labels in truth.csv.
   correct: 48 (80%)
@@ -764,6 +802,7 @@ original answer next to yours.
 | `events PACKAGE` | Independent visits | `--gap` |
 | `review PACKAGE` | Review app | `--images`, `--reviewer`, `--order`, `--port`, `--no-open-browser` |
 | `review-stats PACKAGE` | Review summary | |
+| `labels PACKAGE SOURCE` | Import existing labels as a truth file | `--out`, `--format`, `--species-column`, `--path-column`, `--file-column`, `--folder-column`, `--names` |
 | `evaluate PACKAGE` | Accuracy and thresholds | `--truth`, `--target-precision`, `--report`, `--images`, `--deployment` |
 | `crops PACKAGE` | Training crops | `--images`, `--out`, `--truth`, `--padding`, `--val`, `--test`, `--seed` |
 | `adapt CROPS` | Train the adapted layer | `--out`, `--epochs`, `--learning-rate`, `--balanced`, `--seed`, `--device` |
