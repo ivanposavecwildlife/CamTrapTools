@@ -26,6 +26,7 @@ from camtraptools import (
     report,
     review,
     richness,
+    summary,
 )
 
 app = typer.Typer(
@@ -955,3 +956,30 @@ def report_covariates(models: pd.DataFrame | None) -> None:
             levels = ", ".join(f"{level}: {value:.2f}" for level, value in row["occupancyByLevel"].items())
             typer.echo(f"    occupancy by level: {levels}")
     typer.echo("  A ΔAIC below 2 means the covariates add little; above 4, they clearly improve the model.")
+
+
+@app.command("summary")
+def summary_cmd(
+    package: Annotated[
+        Path,
+        typer.Argument(exists=True, file_okay=False, help="Package folder with events from `camtraptools events`."),
+    ],
+    out: Annotated[Path, typer.Option(help="Where to write the HTML summary.")] = Path("summary.html"),
+    title: Annotated[str | None, typer.Option(help="Title of the survey; default: the package folder name.")] = None,
+    occasion_days: Annotated[
+        int, typer.Option(min=1, help="Days per sampling occasion for occupancy.")
+    ] = ecology.DEFAULT_OCCASION_DAYS,
+    min_activity_events: Annotated[
+        int, typer.Option(min=2, help="Fewest events for a species' activity curve.")
+    ] = activity.DEFAULT_MIN_EVENTS,
+) -> None:
+    """Write a one-page HTML summary of the survey's results to share with a project."""
+    if not (package / detect.OBSERVATIONS_FILE).exists():
+        typer.echo(f"Error: no observations.csv in {package}; run `camtraptools detect` first.", err=True)
+        raise typer.Exit(1)
+    try:
+        summary.run(package, out, title, occasion_days, min_activity_events)
+    except ValueError as error:
+        typer.echo(f"Error: {error}", err=True)
+        raise typer.Exit(1) from error
+    typer.echo(f"Wrote {out}")

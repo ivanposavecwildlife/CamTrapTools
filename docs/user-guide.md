@@ -752,6 +752,20 @@ side for each source. On the Kgalagadi survey, the AI alone missed brown hyena, 
 fox and African wildcat entirely; this is the kind of mistake `compare` makes visible
 before it reaches a report.
 
+### Share the results
+
+```bash
+camtraptools summary my_survey --out summary.html --title "Kgalagadi camera-trap survey 2024"
+```
+
+`summary.html` is one page to hand back to a project or partner: the survey's key
+numbers, camera problems with the timeline, a table of species with their events,
+relative abundance index, sites, naive and modelled occupancy and busiest time of day,
+the daily activity chart with overlaps, species richness with the accumulation curve,
+how the species were identified (AI, adapted layer, how many events a person
+reviewed, and accuracy if `evaluate` was run), and the methods and their limits in
+plain language. It works offline, in light and dark mode, and on a phone.
+
 ## Step 9: publish (`export`)
 
 ```bash
@@ -877,6 +891,7 @@ original answer next to yours.
 | `crops PACKAGE` | Training crops | `--images`, `--out`, `--truth`, `--padding`, `--val`, `--test`, `--seed` |
 | `adapt CROPS` | Train the adapted layer | `--out`, `--epochs`, `--learning-rate`, `--balanced`, `--seed`, `--device` |
 | `ecology PACKAGE` | Occupancy, abundance index, activity and richness | `--out`, `--occasion-days`, `--taxon`, `--all-taxa`, `--min-activity-events`, `--occupancy-covariate`, `--detection-covariate` |
+| `summary PACKAGE` | One-page HTML summary of the results | `--out`, `--title`, `--occasion-days`, `--min-activity-events` |
 | `compare PACKAGE` | Compare labellings | `--out`, `--truth`, `--other`, `--occasion-days`, `--min-activity-events` |
 | `export PACKAGE` | Camtrap DP for GBIF | `--out`, `--title`, `--contributor`, `--timezone`, `--sampling-design`, `--license`, `--media-license`, `--exclude-humans`, `--coordinate-decimals` |
 

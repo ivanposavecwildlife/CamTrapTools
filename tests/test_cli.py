@@ -778,3 +778,26 @@ def test_export_command_warns_about_people(tmp_path):
     assert "⚠ 1 image show people; use --exclude-humans" in warned.output.replace("image shows", "image show")
     assert "Left out 1 image of people and their observations." in excluded.output
     assert "Rounded coordinates to 2 decimals" in excluded.output
+
+
+def test_summary_command_writes_a_page(make_image, tmp_path):
+    make_image("images/camera_A/IMG_0001.JPG", date_time_original="2024:03:01 06:00:00")
+    make_image("images/camera_A/IMG_0002.JPG", date_time_original="2024:03:02 21:00:00")
+    sheet = tmp_path / "sheet.csv"
+    sheet.write_text("deploymentID,latitude,longitude,deploymentStart,deploymentEnd\ncamera_A,52.7,23.8,2024-03-01,2024-03-10\n")
+    runner.invoke(app, ["ingest", str(tmp_path / "images"), "--out", str(tmp_path / "package"), "--field-sheet", str(sheet)])
+    write_speciesnet_results(tmp_path / "package", 0.9)
+    runner.invoke(app, ["detect", str(tmp_path / "package")])
+    runner.invoke(app, ["events", str(tmp_path / "package")])
+
+    result = runner.invoke(
+        app, ["summary", str(tmp_path / "package"), "--out", str(tmp_path / "s.html"), "--title", "Test <survey>"]
+    )
+
+    assert result.exit_code == 0, result.output
+    page = (tmp_path / "s.html").read_text(encoding="utf-8")
+    assert page.startswith("<!doctype html>")
+    assert "<h1>Test &lt;survey&gt;</h1>" in page
+    assert "Oryx gazella" in page
+    assert "No events were reviewed by a person" in page
+    assert "Species richness" in page

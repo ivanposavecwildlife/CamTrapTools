@@ -8,6 +8,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `summary` command: a self-contained HTML page of a survey's results to share with a
+  project, with the survey's key numbers, camera problems and timeline, a species table
+  (events, relative abundance index, sites, naive and modelled occupancy with
+  warnings, busiest time of day), the daily activity chart and overlaps, species
+  richness with the accumulation curve, how the labels were made (classifiers,
+  reviewed events, accuracy from `evaluate`), and methods and limitations. It works
+  offline, in light and dark mode and on narrow screens.
 - Occupancy with site covariates in `ecology`: `--occupancy-covariate` and
   `--detection-covariate` name deployment columns (from the field sheet) that may
   affect occupancy or daily detection, through logistic regression with numeric

@@ -96,14 +96,14 @@ def plot(curve: pd.DataFrame, estimate: dict) -> str:
     """Return an SVG chart of the accumulation curve with the Chao2 estimate."""
     width, height, left, right, top, bottom = 720, 340, 56, 24, 20, 46
     inner_width, inner_height = width - left - right, height - top - bottom
-    peak = max(estimate["estimatedUpper"], curve["expectedSpecies"].max(), 1) * 1.05
+    peak = max(min(estimate["estimatedUpper"], estimate["estimatedSpecies"] * 1.5), curve["expectedSpecies"].max(), 1) * 1.05
     most = max(int(curve["cameraDays"].max()), 1)
 
     def x(days: float) -> float:
         return left + days / most * inner_width
 
     def y(species: float) -> float:
-        return top + inner_height * (1 - species / peak)
+        return top + inner_height * (1 - min(species, peak) / peak)
 
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" font-family="sans-serif" font-size="12">',

@@ -116,6 +116,10 @@ flash (`cam_noflash`) and clock errors.*
   likely missed.
   Reviewed decisions replace the AI's, and higher taxa are left out unless asked for
   (`--all-taxa`, `--taxon`).
+- **`summary`**: one HTML page to hand back to a project: key numbers, camera
+  problems, a species table with abundance index, occupancy and activity, the activity
+  and species-richness charts, how the species were identified, and the methods and
+  their limits in plain language.
 - **`compare`**: runs the ecology analyses on several labellings of the same survey
   (the AI's labels alone, with human reviews, ground truth from `--truth`, and other
   packages such as one with an adapted layer, `--other adapted=FOLDER`) and reports how
@@ -159,6 +163,7 @@ camtraptools crops my_project --images sd_cards --out my_crops
 camtraptools adapt my_crops --out my_model
 camtraptools detect my_project --images sd_cards --adapted my_model
 camtraptools ecology my_project --out my_ecology
+camtraptools summary my_project --out summary.html --title "My survey"
 camtraptools compare my_project --truth labels.csv --out my_comparison
 camtraptools export my_project --out publish --title "My survey" \
     --contributor "Your Name" --timezone Africa/Johannesburg
