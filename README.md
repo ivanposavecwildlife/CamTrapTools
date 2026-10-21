@@ -73,9 +73,11 @@ flash (`cam_noflash`) and clock errors.*
 - **`review`**: a local web app for checking the AI event by event, **least confident
   first**. Each page shows the images with bounding boxes, the AI's decision and
   confidence, and a form pre-filled with that decision: press Enter to accept, `B` for
-  blank, or correct the species and count. Decisions are saved as human observations
-  next to the machine's, and `review-stats` reports agreement with the AI, corrections
-  by confidence and review speed.
+  blank, or correct the species and count. Click an image to enlarge and zoom it. Names
+  can be typed as scientific or common names (`meerkat`) from every species SpeciesNet
+  knows, and a visit can have several species (mixed herds). Decisions are saved as
+  human observations next to the machine's, and `review-stats` reports agreement with
+  the AI, corrections by confidence and review speed.
 
   ![Review app showing a camera event with the AI's boxes and a human correction](https://raw.githubusercontent.com/ivanposavecwildlife/CamTrapTools/main/docs/review.jpg)
 

@@ -18,7 +18,7 @@ from camtraptools import __version__, activity, check, ecology, richness
 from camtraptools.detect import OBSERVATIONS_FILE
 from camtraptools.evaluate import EVALUATION_FILE
 from camtraptools.report import timeline_svg
-from camtraptools.reviews import load_reviews
+from camtraptools.reviews import load_reviews, main_reviews
 
 templates = Environment(loader=PackageLoader("camtraptools"), autoescape=select_autoescape())
 
@@ -60,7 +60,7 @@ def labelling(package_dir: Path) -> dict:
     observations = pd.read_csv(package_dir / OBSERVATIONS_FILE, dtype=str)
     events = observations[(observations["observationLevel"] == "event") & (observations["classificationMethod"] != "human")]
     media = observations[observations["observationLevel"] == "media"]
-    reviewed = load_reviews(package_dir)
+    reviewed = main_reviews(load_reviews(package_dir))
     result = {
         "classifiers": sorted(media["classifiedBy"].dropna().unique()),
         "events": len(events),

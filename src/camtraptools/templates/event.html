@@ -50,6 +50,21 @@
   .keys { color: var(--text-secondary); font-size: 13px; margin: 0 0 16px; }
   kbd { font: 12px ui-monospace, monospace; padding: 1px 5px; border: 1px solid var(--line); border-radius: 4px; }
   .reviewed strong { color: var(--text-primary); }
+  .error { margin: 0 0 12px; padding: 8px 12px; border: 1px solid #d03b3b; border-radius: 6px; color: #d03b3b; }
+  form.review .extra { display: flex; gap: 12px; align-items: end; }
+  form.review button.secondary { background: transparent; color: var(--text-primary); border-color: var(--line); }
+  .frame img { cursor: zoom-in; }
+  #viewer { position: fixed; inset: 0; z-index: 10; background: rgba(0, 0, 0, 0.92); display: none; }
+  #viewer.open { display: block; }
+  #viewer .stage { position: absolute; inset: 0 0 36px; overflow: auto; display: grid; place-items: center; }
+  #viewer .stage.zoomed { place-items: start; }
+  #viewer .frame { width: min(100vw, calc((100vh - 36px) * var(--ratio, 1.3))); }
+  #viewer .stage.zoomed .frame { width: calc(min(100vw, calc((100vh - 36px) * var(--ratio, 1.3))) * 3); }
+  #viewer .frame img { border-radius: 0; cursor: zoom-in; }
+  #viewer .stage.zoomed .frame img { cursor: zoom-out; }
+  #viewer .bar { position: absolute; left: 0; right: 0; bottom: 0; height: 36px; display: flex; align-items: center;
+                 justify-content: center; gap: 16px; color: #c3c2b7; font-size: 13px; }
+  #viewer kbd { color: #fff; border-color: #555; }
 </style>
 </head>
 <body>
@@ -80,9 +95,10 @@
   {% endif %}
   · AI confidence {{ "%.2f" | format(event.confidence) }}
 </p>
-<p class="keys"><kbd>Enter</kbd> or <kbd>A</kbd> save · <kbd>B</kbd> blank · <kbd>1</kbd>–<kbd>9</kbd> count · <kbd>S</kbd> species · <kbd>←</kbd> <kbd>→</kbd> previous / next · <kbd>Esc</kbd> leave a field</p>
+<p class="keys"><kbd>Enter</kbd> or <kbd>A</kbd> save · <kbd>B</kbd> blank · <kbd>1</kbd>–<kbd>9</kbd> count · <kbd>S</kbd> species · <kbd>+</kbd> another species · <kbd>V</kbd> or click an image to enlarge · <kbd>←</kbd> <kbd>→</kbd> previous / next · <kbd>Esc</kbd> leave a field</p>
+{% if error %}<p class="error" role="alert">Not saved: {{ error }}</p>{% endif %}
 {% if review is not none %}
-<p class="reviewed">✓ Reviewed by {{ review.reviewer }}: <strong>{{ review.scientificName if review.scientificName is string else review.observationType }}</strong>{% if review["count"] is string %} · count {{ review["count"] }}{% endif %}</p>
+<p class="reviewed">✓ Reviewed by {{ review.reviewer }}: <strong>{{ review.scientificName if review.scientificName is string else review.observationType }}</strong>{% if review["count"] is string %} · count {{ review["count"] }}{% endif %}{% for other in others %} + <strong>{{ other.scientificName }}</strong> · count {{ other["count"] }}{% endfor %}</p>
 {% endif %}
 {% set current = review if review is not none else event %}
 <form class="review" method="post" action="/events/{{ event.eventID }}/review">
@@ -93,12 +109,27 @@
     </select>
   </label>
   <label>Scientific name
-    <input name="scientific_name" list="taxa" value="{{ current.scientificName if current.scientificName is string else '' }}" placeholder="e.g. Canis mesomelas">
+    <input name="scientific_name" list="taxa" value="{{ current.scientificName if current.scientificName is string else '' }}" placeholder="scientific or common name">
   </label>
   <label>Count
     <input name="count" type="number" min="1" value="{{ current['count'] | int if current['count'] is string else '' }}">
   </label>
+  {% for other in others %}
+  <div class="extra">
+    <label>Also seen <input name="extra_name" list="taxa" value="{{ other.scientificName }}"></label>
+    <label>Count <input name="extra_count" type="number" min="1" value="{{ other['count'] | int }}"></label>
+    <button type="button" class="secondary remove" title="Remove this species">×</button>
+  </div>
+  {% endfor %}
+  <button type="button" class="secondary" id="add-species" title="Another species in the same visit (+)">+ Species</button>
   <button type="submit">Save review as {{ reviewer }} ↵</button>
+  <template id="extra-row">
+    <div class="extra">
+      <label>Also seen <input name="extra_name" list="taxa" placeholder="scientific or common name"></label>
+      <label>Count <input name="extra_count" type="number" min="1" value="1"></label>
+      <button type="button" class="secondary remove" title="Remove this species">×</button>
+    </div>
+  </template>
   <datalist id="taxa">
     {% for taxon in taxa %}<option value="{{ taxon }}">{{ names.get(taxon, "") }}</option>{% endfor %}
   </datalist>
@@ -127,10 +158,73 @@
   </figure>
   {% endfor %}
 </section>
+<div id="viewer" role="dialog" aria-label="Enlarged image">
+  <div class="stage"></div>
+  <div class="bar"><span class="caption"></span><span><kbd>←</kbd> <kbd>→</kbd> images · click or <kbd>Z</kbd> zoom · <kbd>Esc</kbd> close</span></div>
+</div>
 </main>
 <script>
   const form = document.querySelector("form.review");
+  const figures = [...document.querySelectorAll(".images figure")];
+  const viewer = document.getElementById("viewer");
+  const stage = viewer.querySelector(".stage");
+  let shown = -1;
+
+  function show(index) {
+    shown = (index + figures.length) % figures.length;
+    const frame = figures[shown].querySelector(".frame").cloneNode(true);
+    const image = figures[shown].querySelector(".frame img");
+    if (image.naturalWidth) frame.style.setProperty("--ratio", image.naturalWidth / image.naturalHeight);
+    stage.classList.remove("zoomed");
+    stage.replaceChildren(frame);
+    viewer.querySelector(".caption").textContent =
+      `${shown + 1} of ${figures.length} · ${figures[shown].querySelector("figcaption").textContent}`;
+    viewer.classList.add("open");
+  }
+
+  function close() {
+    viewer.classList.remove("open");
+    shown = -1;
+  }
+
+  function zoom(x, y) {
+    const before = stage.querySelector(".frame").getBoundingClientRect();
+    const across = x === undefined ? 0.5 : (x - before.left) / before.width;
+    const down = y === undefined ? 0.5 : (y - before.top) / before.height;
+    stage.classList.toggle("zoomed");
+    const after = stage.querySelector(".frame").getBoundingClientRect();
+    stage.scrollLeft = across * after.width - stage.clientWidth / 2;
+    stage.scrollTop = down * after.height - stage.clientHeight / 2;
+  }
+
+  figures.forEach((figure, index) => {
+    figure.querySelector(".frame img").addEventListener("click", () => show(index));
+  });
+  stage.addEventListener("click", (event) => {
+    if (event.target.closest(".frame")) zoom(event.clientX, event.clientY);
+    else close();
+  });
+
+  function addSpecies() {
+    const row = document.getElementById("extra-row").content.firstElementChild.cloneNode(true);
+    form.querySelector("#add-species").before(row);
+    row.querySelector("input").focus();
+  }
+  form.querySelector("#add-species").addEventListener("click", addSpecies);
+  form.addEventListener("click", (event) => {
+    if (event.target.matches(".remove")) event.target.closest(".extra").remove();
+  });
+
   document.addEventListener("keydown", (event) => {
+    if (shown >= 0) {
+      const action = { Escape: close, ArrowLeft: () => show(shown - 1), ArrowRight: () => show(shown + 1),
+                       z: () => zoom(), v: close }[event.key];
+      if (action) {
+        event.preventDefault();
+        action();
+      }
+      return;
+    }
     if (event.target.closest("input, select")) {
       if (event.key === "Escape") event.target.blur();
       return;
@@ -145,12 +239,18 @@
       form.observation_type.value = "blank";
       form.scientific_name.value = "";
       form.count.value = "";
+      form.querySelectorAll(".extra").forEach((row) => row.remove());
       form.requestSubmit();
     } else if (/^[1-9]$/.test(event.key)) {
       form.count.value = event.key;
     } else if (event.key === "s") {
       event.preventDefault();
       form.scientific_name.select();
+    } else if (event.key === "+") {
+      event.preventDefault();
+      addSpecies();
+    } else if (event.key === "v" && figures.length) {
+      show(0);
     }
   });
 </script>

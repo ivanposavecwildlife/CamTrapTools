@@ -87,3 +87,25 @@ def test_minutes_needed_uses_review_speed(tmp_path):
     ).to_csv(package / reviews.REVIEWS_FILE, index=False)
 
     assert plan.minutes_needed(package, 10) == pytest.approx(10.0)
+
+
+def test_second_species_of_a_visit_counts_as_a_record(tmp_path):
+    package = make_survey(tmp_path, SURVEY)
+    reviews.save_review(package, "b1", "animal", "Oryx gazella", 2, "Tester", [("Connochaetes taurinus", 4)])
+    chances, effort = chances_for(package)
+
+    summary, _ = plan.taxon_plan(chances, "Connochaetes taurinus", effort, 7)
+
+    assert summary["records"] == 1
+    assert summary["expectedFalseSites"] == 0.0
+
+
+def test_doubt_without_events_worth_reviewing_is_spread_thin(tmp_path):
+    chances, effort = chances_for(make_survey(tmp_path, SURVEY))
+
+    thin, cells = plan.taxon_plan(chances, "Oryx gazella", effort, 7, min_gain=0.99)
+    planned, _ = plan.taxon_plan(chances, "Oryx gazella", effort, 7)
+
+    assert cells.empty
+    assert (thin["toReview"], thin["spreadThin"]) == (0, True)
+    assert planned["spreadThin"] is False

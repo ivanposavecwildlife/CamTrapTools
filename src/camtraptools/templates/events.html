@@ -25,7 +25,7 @@
 <body>
 <main>
 <h1>All events</h1>
-{% set reviewed = events | selectattr("eventID", "in", done.index) | list | length %}
+{% set reviewed = events | selectattr("eventID", "in", done) | list | length %}
 <p class="meta">{{ reviewed }} of {{ events | length }} reviewed · {{ {"uncertainty": "least confident first", "plan": "review plan first", "time": "in time order"}[order] }}{% if reviewed == events | length %} · ✓ all done{% endif %}</p>
 <div class="table-scroll">
 <table>
@@ -37,7 +37,7 @@
   <td>{{ event.eventStart }}</td>
   <td>{{ event.scientificName if event.scientificName is string else event.observationType }}</td>
   <td class="num">{{ "%.2f" | format(event.confidence) }}</td>
-  <td>{% if event.eventID in done.index %}{% set review = done.loc[event.eventID] %}<span class="done">✓</span> {{ review.scientificName if review.scientificName is string else review.observationType }}{% else %}–{% endif %}</td>
+  <td>{% if event.eventID in done %}<span class="done">✓</span> {{ done[event.eventID] }}{% else %}–{% endif %}</td>
 </tr>
 {% endfor %}
 </tbody>

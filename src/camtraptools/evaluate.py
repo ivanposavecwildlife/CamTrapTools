@@ -13,7 +13,7 @@ from PIL import Image
 from camtraptools import __version__
 from camtraptools.detect import OBSERVATIONS_FILE, RESULTS_FILE, parse_taxon
 from camtraptools.importer import match_path
-from camtraptools.reviews import load_reviews, order_events
+from camtraptools.reviews import load_reviews, main_reviews, order_events
 
 EVALUATION_FILE = "evaluation.csv"
 OUTCOMES = ["correct", "not to species", "more specific", "unverified", "wrong"]
@@ -37,8 +37,9 @@ def machine_labels(observations: pd.DataFrame) -> pd.Series:
 
 
 def truth_from_reviews(package_dir: Path) -> pd.Series:
-    """Return the reviewers' label for every reviewed event, by event ID."""
-    reviews = load_reviews(package_dir)
+    """Return the reviewers' label for every reviewed event, by event ID: the main
+    species of visits with several."""
+    reviews = main_reviews(load_reviews(package_dir))
     labels = [event_label(row.observationType, row.scientificName) for row in reviews.itertuples()]
     return pd.Series(labels, index=reviews["eventID"], name="truth")
 

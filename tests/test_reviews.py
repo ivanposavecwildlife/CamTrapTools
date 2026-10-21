@@ -161,3 +161,33 @@ def test_summarize_by_confidence_counts_changes_per_band():
         "0.6 to 0.95": {"reviewed": 1, "changed": 0},
         "0.95 and up": {"reviewed": 2, "changed": 1},
     }
+
+
+def test_save_review_with_several_species(tmp_path):
+    package = make_package(tmp_path)
+
+    reviews.save_review(package, "camera_A-0001", "animal", "Oryx gazella", 3, "Tester", [("Connochaetes taurinus", 5)])
+
+    saved = reviews.load_reviews(package)
+    assert saved[["scientificName", "count"]].values.tolist() == [["Oryx gazella", "3"], ["Connochaetes taurinus", "5"]]
+    observations = pd.read_csv(package / "observations.csv", dtype=str)
+    humans = observations[observations["classificationMethod"] == "human"]
+    assert humans["observationID"].tolist() == ["camera_A-0001-human", "camera_A-0001-human-2"]
+    assert reviews.main_reviews(saved)["scientificName"].tolist() == ["Oryx gazella"]
+    assert reviews.apply_reviews(package) == (1, 0)
+
+
+@pytest.mark.parametrize(
+    ("observation_type", "name", "others", "message"),
+    [
+        ("blank", None, [("Oryx gazella", 1)], "only animal observations"),
+        ("animal", "Oryx gazella", [("Oryx gazella", 2)], "different scientific name"),
+        ("animal", None, [("Oryx gazella", 2)], "different scientific name"),
+        ("animal", "Oryx gazella", [("Vulpes chama", 0)], "count of at least 1"),
+    ],
+)
+def test_save_review_rejects_invalid_extra_species(tmp_path, observation_type, name, others, message):
+    package = make_package(tmp_path)
+
+    with pytest.raises(ValueError, match=message):
+        reviews.save_review(package, "camera_A-0001", observation_type, name, None if observation_type == "blank" else 1, "Tester", others)

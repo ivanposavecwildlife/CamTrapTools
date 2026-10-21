@@ -120,7 +120,7 @@ camtraptools --version
 ```
 
 ```
-CamTrapTools 0.8.0
+CamTrapTools 0.8.1
 ```
 
 `camtraptools --help` lists all commands, and `camtraptools COMMAND --help` explains
@@ -422,10 +422,27 @@ filled in with that decision.
 ![The review app](review.jpg)
 
 - **Accept** the AI's decision with Enter (or A).
-- **Correct** it: press S to jump to the species field and type the scientific name,
-  or B to mark the event blank. Keys 1–9 set the count.
+- **Correct** it: press S to jump to the species field and type the name, or B to mark
+  the event blank. Keys 1–9 set the count. Type a scientific or a common name in any
+  capitalisation: `meerkat` is saved as *Suricata suricatta*, `aves` as *Aves*. The
+  suggestions include every species SpeciesNet knows (after `detect` has run once), not
+  only those it named in your survey. A name that matches nothing is not saved; the
+  page says why and suggests what you may have meant (`brown hyena`: *did you mean
+  brown hyaena (Parahyaena brunnea)?*).
+- **Several species in one visit**, such as a mixed herd of wildebeest and gemsbok:
+  press + (or **+ Species**) and add the other species with its count. Every species
+  is recorded; the first is the main one.
+- **Enlarge** an image by clicking it (or V). In the viewer, click or press Z to zoom
+  in three times where you clicked, scroll to look around, use ← → for the visit's
+  other images and Esc to close.
 - **Move** between events with the arrow keys. Saving moves to the next event.
 - The **All events** page lists every event with its confidence and review status.
+
+**When you can't tell what it is**, look at the other images of the visit first;
+animals often come closer or move away. Then give the most precise name you are sure
+of (`Bovidae` for an antelope, `Aves` for a bird, `Mammalia` for fur); if you only
+know it is an animal, choose type animal with no name. Never guess a species: a wrong
+species adds a false record, a higher taxon never misleads.
 
 Events are shown **least confident first**. On a Kgalagadi sample, every event the AI
 did not get exactly right was among the least confident 22%. On the full season,
@@ -472,8 +489,11 @@ recorded at one site but was probably missed at about six more, because the AI o
 called it only "Canidae". It then lists the events whose review would fix the most,
 until each species' doubt is small: at most 5% of its records (`--tolerance`), and
 never events with less than a 1 in 20 chance of changing a record (`--min-gain`).
-Species that need nothing are **stable**; species the AI never named but your
-corrections show are probably there are listed separately.
+Species that need nothing are **stable**. **Doubt spread thin** means records are
+still in doubt but spread over many events, none with a 1 in 20 chance of changing a
+record, so reviewing more is not worth it; `ecology --ai-errors` keeps flagging them.
+Species the AI never named but your corrections show are probably there are listed
+separately.
 
 Review the planned events with `review --order plan`, then run `plan` again: what you
 corrected changes what the AI is likely to have got wrong elsewhere. Before any

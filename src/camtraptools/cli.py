@@ -545,12 +545,19 @@ def plan_cmd(
         f"\nPer species (records: site-occasions of {occasion_days} days where the results have it; in doubt: "
         "how many of those cells are expected to be wrong, including missed records):"
     )
-    table = species.copy()
+    table = species.drop(columns="spreadThin")
     table["plan"] = [
-        "stable" if row.toReview == 0 else f"review {crops.plural(int(row.toReview), 'event')}"
+        f"review {crops.plural(int(row.toReview), 'event')}"
+        if row.toReview
+        else ("doubt spread thin" if row.spreadThin else "stable")
         for row in species.itertuples()
     ]
     typer.echo(table.to_string())
+    if species["spreadThin"].any():
+        typer.echo(
+            "doubt spread thin: some records are still in doubt, but spread over many events, none with at least a "
+            f"{plan_min_gain(min_gain)} chance of changing a record; `ecology --ai-errors` keeps flagging them."
+        )
     missed = species[(species["records"] == 0) & (species["expectedMissedSites"] >= plan.MISSED_SITES_TO_LIST)]
     if not missed.empty:
         typer.echo(
@@ -837,6 +844,11 @@ def ecology_cmd(
     )
     if (out / activity.PLOT_FILE).exists() and "activityPeak" in summary.columns and summary["activityPeak"].notna().any():
         typer.echo(f"Wrote {out / activity.ACTIVITY_FILE}, {out / activity.OVERLAP_FILE} and {out / activity.PLOT_FILE}")
+
+
+def plan_min_gain(min_gain: float) -> str:
+    """Return a minimum gain as a chance in words, e.g. ``1 in 20`` for 0.05."""
+    return f"1 in {round(1 / min_gain)}" if min_gain > 0 else "any"
 
 
 def report_ai_errors(summary: pd.DataFrame) -> None:

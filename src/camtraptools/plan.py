@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 
 from camtraptools import ecology, uncertainty
-from camtraptools.reviews import load_reviews, review_speed
+from camtraptools.reviews import load_reviews, main_reviews, review_speed
 
 DEFAULT_TOLERANCE = 0.05
 MIN_DOUBT_LEFT = 0.25
@@ -42,8 +42,9 @@ def taxon_plan(
     """Return one taxon's doubt and the cells to review for it.
 
     The first result has the taxon's records (cells where the results have it), the
-    cells in doubt, the expected false and missed sites, how many events to review and
-    the doubt that is left afterwards. The second has one row per cell to review, in
+    cells in doubt, the expected false and missed sites, how many events to review,
+    the doubt that is left afterwards, and whether that doubt is above the target but
+    spread too thinly for any event to be worth reviewing (``spreadThin``). The second has one row per cell to review, in
     order, with its doubt per event (``priority``) and its unreviewed events.
     """
     events = chances.events
@@ -55,7 +56,7 @@ def taxon_plan(
             "row": rows,
             "column": columns,
             "eventID": events["eventID"],
-            "reported": events["used"] == taxon,
+            "reported": (events["used"] == taxon) | events["also"].map(lambda names: taxon in names),
             "open": events["truth"].isna() & ((events["used"] == taxon) | (chance > 0)),
         }
     )
@@ -89,6 +90,7 @@ def taxon_plan(
         "expectedMissedSites": round(missed_sites, 1),
         "toReview": len({event for ids in chosen["ids"] for event in ids}),
         "leftInDoubt": round(left, 2),
+        "spreadThin": bool(chosen.empty and left > target),
     }
     return summary, chosen.assign(taxon=taxon)[["taxon", "priority", "doubt", "ids"]]
 
@@ -122,7 +124,11 @@ def build(
             rows.append(summary)
             plans.append(cells)
     species = pd.DataFrame(
-        rows, columns=["taxon", "records", "inDoubt", "expectedFalseSites", "expectedMissedSites", "toReview", "leftInDoubt"]
+        rows,
+        columns=[
+            "taxon", "records", "inDoubt", "expectedFalseSites", "expectedMissedSites", "toReview", "leftInDoubt",
+            "spreadThin",
+        ],
     ).set_index("taxon")
     species = species.sort_values(["toReview", "records"], ascending=[False, False])
     cells = pd.concat(plans, ignore_index=True) if plans else pd.DataFrame(columns=["taxon", "priority", "doubt", "ids"])
@@ -166,5 +172,5 @@ def run(
 def minutes_needed(package_dir: Path, events: int) -> float | None:
     """Return how many minutes reviewing ``events`` events should take at the
     reviewer's speed so far, or ``None`` if the speed is not known yet."""
-    speed = review_speed(load_reviews(package_dir)["reviewedAt"])
+    speed = review_speed(main_reviews(load_reviews(package_dir))["reviewedAt"])
     return events / speed["perMinute"] if speed["perMinute"] else None

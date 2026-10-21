@@ -33,7 +33,8 @@ camtraptools ecology my_survey --out ecology --ai-errors
    doubt removed per event reviewed, until a species' doubt is at most 5% of its
    records (`--tolerance`), or a quarter of a cell for rare species. Events with less
    than a 1 in 20 chance of correcting a record are not worth the time and are left
-   out (`--min-gain`).
+   out (`--min-gain`). A species whose doubt is spread over such events is shown as
+   **doubt spread thin** rather than stable.
 
 The plan is saved in the package as `review_plan.csv` (events in order, with the
 species each matters for) and `review_plan_species.csv`. `review --order plan` makes a

@@ -1,4 +1,5 @@
 import json
+import re
 
 import pandas as pd
 import pytest
@@ -6,6 +7,12 @@ from fastapi.testclient import TestClient
 
 from camtraptools import review
 from camtraptools.detect import OBSERVATION_COLUMNS
+
+
+@pytest.fixture(autouse=True)
+def no_speciesnet_taxonomy(monkeypatch):
+    """Keep tests independent of a SpeciesNet download on this computer."""
+    monkeypatch.setattr(review, "speciesnet_taxonomy", lambda: None)
 
 
 @pytest.fixture
@@ -268,7 +275,8 @@ def test_invalid_review_is_rejected_with_reason(client):
     )
 
     assert response.status_code == 400
-    assert "has no count" in response.text
+    assert "Not saved: a blank observation has no count" in response.text
+    assert "Camera camera_A" in response.text
 
 
 def test_review_of_unknown_event_is_not_found(client):
@@ -276,3 +284,117 @@ def test_review_of_unknown_event_is_not_found(client):
     response = client.post("/events/camera_Z-0001/review", data={"token": form_token(page), "observation_type": "blank"})
 
     assert response.status_code == 404
+
+
+TAXONOMY = pd.DataFrame(
+    {
+        "scientificName": ["Suricata suricatta", "Aves", "Canis mesomelas", "Vulpes chama", "Parahyaena brunnea"],
+        "commonName": ["meerkat", "bird", "black-backed jackal", "cape fox", "brown hyaena"],
+        "genus": ["Suricata", None, "Canis", "Vulpes", "Parahyaena"],
+        "family": ["Herpestidae", None, "Canidae", "Canidae", "Hyaenidae"],
+        "order": ["Carnivora", None, "Carnivora", "Carnivora", "Carnivora"],
+        "class": ["Mammalia", "Aves", "Mammalia", "Mammalia", "Mammalia"],
+    }
+)
+
+
+@pytest.mark.parametrize(
+    ("typed", "expected"),
+    [
+        ("aves", "Aves"),
+        ("meerkat", "Suricata suricatta"),
+        ("ORYX GAZELLA", "Oryx gazella"),
+        ("Black-backed jackal", "Canis mesomelas"),
+        ("parahyaena BRUNNEA", "Parahyaena brunnea"),
+        ("Lepus capensis", "Lepus capensis"),
+    ],
+)
+def test_names_resolve_capitals_and_common_names(typed, expected):
+    names = review.Names({"Oryx gazella"}, {"Oryx gazella": "gemsbok"}, TAXONOMY)
+
+    assert names.resolve(typed) == expected
+
+
+def test_names_reject_unknown_single_words_and_phrases():
+    names = review.Names(set(), {}, TAXONOMY)
+
+    with pytest.raises(ValueError, match="not a species or group SpeciesNet knows"):
+        names.resolve("antelope")
+    with pytest.raises(ValueError, match="scientific name"):
+        names.resolve("small brown bird")
+
+
+@pytest.mark.parametrize(
+    ("typed", "suggested"),
+    [
+        ("brown hyena", "did you mean brown hyaena (Parahyaena brunnea)?"),
+        ("Suricata suricata", "did you mean Suricata suricatta"),
+    ],
+)
+def test_names_suggest_what_the_reviewer_meant(typed, suggested):
+    names = review.Names(set(), {}, TAXONOMY)
+
+    with pytest.raises(ValueError, match=re.escape(suggested)):
+        names.resolve(typed)
+
+
+def test_names_without_taxonomy_accept_new_names_capitalised():
+    names = review.Names(set(), {}, None)
+
+    assert names.resolve("felidae") == "Felidae"
+    assert names.taxa == []
+
+
+def test_species_list_includes_the_taxonomy_with_common_names(package, monkeypatch):
+    monkeypatch.setattr(review, "speciesnet_taxonomy", lambda: TAXONOMY)
+    client = TestClient(review.create_app(*package))
+
+    page = client.get("/events/camera_A-0001").text
+
+    assert '<option value="Suricata suricatta">meerkat</option>' in page
+    assert '<option value="Oryx gazella">gemsbok</option>' in page
+
+
+def test_review_with_a_second_species(package, monkeypatch):
+    monkeypatch.setattr(review, "speciesnet_taxonomy", lambda: TAXONOMY)
+    client = TestClient(review.create_app(*package, reviewer="Ivan Posavec"))
+    token = form_token(client.get("/events/camera_A-0001").text)
+
+    response = client.post(
+        "/events/camera_A-0001/review",
+        data={
+            "token": token, "observation_type": "animal", "scientific_name": "oryx gazella", "count": "3",
+            "extra_name": ["meerkat", ""], "extra_count": ["", "2"],
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    saved = pd.read_csv(package[0] / "reviews.csv")
+    assert saved[["scientificName", "count"]].values.tolist() == [["Oryx gazella", 3], ["Suricata suricatta", 1]]
+    page = client.get("/events/camera_A-0001").text
+    assert "+ <strong>Suricata suricatta</strong> · count 1" in page
+    assert 'name="extra_name" list="taxa" value="Suricata suricatta"' in page
+    assert "Oryx gazella (3) + Suricata suricatta (1)" in client.get("/events").text
+
+
+def test_unknown_name_is_not_saved(package, monkeypatch):
+    monkeypatch.setattr(review, "speciesnet_taxonomy", lambda: TAXONOMY)
+    client = TestClient(review.create_app(*package))
+    token = form_token(client.get("/events/camera_A-0001").text)
+
+    response = client.post(
+        "/events/camera_A-0001/review",
+        data={"token": token, "observation_type": "animal", "scientific_name": "antelope", "count": "1"},
+    )
+
+    assert response.status_code == 400
+    assert "Not saved: &#39;antelope&#39; is not a species or group SpeciesNet knows" in response.text
+    assert not (package[0] / "reviews.csv").exists()
+
+
+def test_event_page_has_an_image_viewer(client):
+    page = client.get("/events/camera_A-0001").text
+
+    assert 'id="viewer"' in page
+    assert "click an image to enlarge" in page

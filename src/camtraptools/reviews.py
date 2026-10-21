@@ -1,5 +1,9 @@
 """Human review decisions: stored in ``reviews.csv`` and written to
-``observations.csv`` as event-level observations classified by a human."""
+``observations.csv`` as event-level observations classified by a human.
+
+An event usually has one decision. A visit by several species, such as a mixed herd,
+has one row per species: the first is the main one, used wherever an event needs a
+single label, and every row becomes an observation."""
 
 from datetime import datetime
 from pathlib import Path
@@ -34,13 +38,21 @@ def validate_review(observation_type: str, scientific_name: str | None, count: i
         raise ValueError("only animal observations have a scientific name")
 
 
+def main_reviews(reviews: pd.DataFrame) -> pd.DataFrame:
+    """Return one review per event: the main species of visits with several."""
+    return reviews.drop_duplicates("eventID")
+
+
 def human_observations(reviews: pd.DataFrame, machine_events: pd.DataFrame) -> pd.DataFrame:
-    """Return one human event-level observation per review of an existing event."""
+    """Return one human event-level observation per review row of an existing event:
+    ``EVENT-human`` for the main species and ``EVENT-human-2`` and so on for others."""
     times = machine_events[["eventID", "deploymentID", "eventStart", "eventEnd"]].drop_duplicates("eventID")
     reviewed = reviews.merge(times, on="eventID")
+    number = reviewed.groupby("eventID").cumcount() + 1
+    suffix = number.map(lambda value: "" if value == 1 else f"-{value}")
     observations = pd.DataFrame(
         {
-            "observationID": reviewed["eventID"] + "-human",
+            "observationID": reviewed["eventID"] + "-human" + suffix,
             "deploymentID": reviewed["deploymentID"],
             "eventID": reviewed["eventID"],
             "eventStart": reviewed["eventStart"],
@@ -59,15 +71,16 @@ def human_observations(reviews: pd.DataFrame, machine_events: pd.DataFrame) -> p
 
 def apply_reviews(package_dir: Path) -> tuple[int, int]:
     """Replace the human observations in ``observations.csv`` with the current
-    reviews. Returns how many were applied and how many refer to events that no
-    longer exist (for example after changing the event gap)."""
+    reviews. Returns how many reviewed events were applied and how many refer to
+    events that no longer exist (for example after changing the event gap)."""
     observations = pd.read_csv(package_dir / OBSERVATIONS_FILE, dtype=str)
     machine = observations[observations["classificationMethod"] != "human"]
     reviews = load_reviews(package_dir)
     humans = human_observations(reviews, machine[machine["observationLevel"] == "event"])
     combined = pd.concat([machine, humans], ignore_index=True)
     combined[OBSERVATION_COLUMNS].to_csv(package_dir / OBSERVATIONS_FILE, index=False)
-    return len(humans), len(reviews) - len(humans)
+    applied = humans["eventID"].nunique()
+    return applied, reviews["eventID"].nunique() - applied
 
 
 def save_review(
@@ -77,19 +90,35 @@ def save_review(
     scientific_name: str | None,
     count: int | None,
     reviewer: str,
+    others: list[tuple[str, int]] | None = None,
 ) -> None:
-    """Record a review decision for one event, replacing any earlier one."""
+    """Record a review decision for one event, replacing any earlier one. ``others``
+    adds more species seen in the same visit, each with its count, after the main
+    one; only animal decisions can have them."""
     validate_review(observation_type, scientific_name, count)
-    review = {
-        "eventID": event_id,
-        "observationType": observation_type,
-        "scientificName": scientific_name or None,
-        "count": str(count) if count is not None else None,
-        "reviewer": reviewer,
-        "reviewedAt": datetime.now().astimezone().isoformat(timespec="seconds"),
-    }
+    others = others or []
+    if others and observation_type != "animal":
+        raise ValueError("only animal observations can have more than one species")
+    names = [scientific_name, *(name for name, _ in others)]
+    if others and (not all(names) or len(set(names)) < len(names)):
+        raise ValueError("each species of a visit needs its own, different scientific name")
+    for name, other_count in others:
+        validate_review("animal", name, other_count)
+    reviewed_at = datetime.now().astimezone().isoformat(timespec="seconds")
+    decisions = [(observation_type, scientific_name, count), *(("animal", name, other_count) for name, other_count in others)]
+    rows = [
+        {
+            "eventID": event_id,
+            "observationType": kind,
+            "scientificName": name or None,
+            "count": str(number) if number is not None else None,
+            "reviewer": reviewer,
+            "reviewedAt": reviewed_at,
+        }
+        for kind, name, number in decisions
+    ]
     reviews = load_reviews(package_dir)
-    reviews = pd.concat([reviews[reviews["eventID"] != event_id], pd.DataFrame([review])], ignore_index=True)
+    reviews = pd.concat([reviews[reviews["eventID"] != event_id], pd.DataFrame(rows)], ignore_index=True)
     reviews[REVIEW_COLUMNS].to_csv(package_dir / REVIEWS_FILE, index=False)
     apply_reviews(package_dir)
 
@@ -156,7 +185,7 @@ def compare_with_machine(package_dir: Path) -> pd.DataFrame:
     machine = observations[observations["classificationMethod"] != "human"]
     events = order_events(machine[machine["observationLevel"] == "event"], machine, "uncertainty")
     events = events[["eventID", "observationType", "scientificName", "count", "confidence"]]
-    compared = load_reviews(package_dir).merge(events, on="eventID", suffixes=("", "AI"))
+    compared = main_reviews(load_reviews(package_dir)).merge(events, on="eventID", suffixes=("", "AI"))
     same_type = compared["observationType"] == compared["observationTypeAI"]
     same_name = compared["scientificName"].fillna("") == compared["scientificNameAI"].fillna("")
     same_count = compared["count"].fillna("") == compared["countAI"].fillna("")

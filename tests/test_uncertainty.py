@@ -162,3 +162,17 @@ def test_ecology_reports_sites_in_doubt_after_enough_reviews(tmp_path, monkeypat
 
     assert summary.loc["Oryx gazella", "expectedFalseSites"] > 0
     assert summary.loc["Vulpes chama", "expectedFalseSites"] == pytest.approx(0.1, abs=0.05)
+
+
+def test_every_species_of_a_reviewed_visit_is_certain(tmp_path):
+    package = make_survey(tmp_path, SURVEY)
+    reviews.save_review(package, "b1", "animal", "Oryx gazella", 2, "Tester", [("Connochaetes taurinus", 4)])
+    deployments = pd.read_csv(package / "deployments.csv", dtype=str)
+
+    chances = uncertainty.load(package, deployments)
+
+    events = chances.events.set_index("eventID")
+    probabilities = chances.probabilities.set_index(chances.events["eventID"])
+    assert events.loc["b1", "used"] == "Oryx gazella"
+    assert events.loc["b1", "also"] == ("Connochaetes taurinus",)
+    assert probabilities.loc["b1", ["Oryx gazella", "Connochaetes taurinus"]].tolist() == [1.0, 1.0]

@@ -37,7 +37,7 @@ from camtraptools.evaluate import (
     outcome,
     truth_from_reviews,
 )
-from camtraptools.reviews import order_events
+from camtraptools.reviews import load_reviews, order_events
 
 CONFIDENCE_LIMITS = (0.005, 0.995)
 PRIOR_SD = 1.0
@@ -80,8 +80,9 @@ def logit(probability):
 
 def event_table(package_dir: Path, deployments: pd.DataFrame) -> pd.DataFrame:
     """Return one row per event with its site, day, the AI's label and confidence,
-    the reviewer's label (missing if the event was not reviewed) and the label the
-    results use (the reviewer's where there is one)."""
+    the reviewer's label (missing if the event was not reviewed; the main species of
+    a visit with several), the label the results use (the reviewer's where there is
+    one) and the other species a reviewer saw in the visit (``also``)."""
     observations = pd.read_csv(package_dir / OBSERVATIONS_FILE, dtype=str)
     machine = observations[observations["classificationMethod"] != "human"]
     events = order_events(machine[machine["observationLevel"] == "event"], machine, "time")
@@ -96,6 +97,8 @@ def event_table(package_dir: Path, deployments: pd.DataFrame) -> pd.DataFrame:
     )
     table["truth"] = table["eventID"].map(truth_from_reviews(package_dir))
     table["used"] = table["truth"].fillna(table["ai"])
+    others = load_reviews(package_dir).groupby("eventID")["scientificName"].agg(lambda names: tuple(names.iloc[1:]))
+    table["also"] = table["eventID"].map(others).map(lambda names: names if isinstance(names, tuple) else ())
     return table.dropna(subset=["day", "site"]).reset_index(drop=True)
 
 
@@ -198,6 +201,7 @@ def label_chances(table: pd.DataFrame, ancestry: dict[str, set[str]]) -> LabelCh
     wrong_by_label = {label: wrong_shares(label, corrections, overall) for label in labels}
     columns = sorted(
         set(table["used"])
+        | {name for names in table["also"] for name in names}
         | {name for shares in right_by_label.values() for name in shares}
         | {name for shares in wrong_by_label.values() for name in shares}
     )
@@ -213,6 +217,8 @@ def label_chances(table: pd.DataFrame, ancestry: dict[str, set[str]]) -> LabelCh
     probabilities.loc[known] = 0.0
     for name, rows in table[known].groupby("truth").groups.items():
         probabilities.loc[rows, name] = 1.0
+    for row, names in table.loc[known, "also"].items():
+        probabilities.loc[row, list(names)] = 1.0
     return LabelChances(table, probabilities, calibration, len(reviewed))
 
 
