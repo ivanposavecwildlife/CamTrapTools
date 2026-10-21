@@ -30,6 +30,7 @@ MIN_SITES_FOR_MODEL = 3
 AT_LIMIT = 0.99
 WIDE_INTERVAL = 0.5
 CHI_SQUARE_95 = 3.841459
+SITES_IN_DOUBT_TO_FLAG = 1.0
 
 
 def is_species(name) -> bool:
@@ -314,6 +315,20 @@ def occupancy_models(histories: dict[str, pd.DataFrame], effort: pd.DataFrame, o
     return pd.DataFrame(rows, columns=["taxon", *columns]).set_index("taxon")
 
 
+def site_doubts(histories: dict[str, pd.DataFrame], effort: pd.DataFrame, occasion_days: int, chances) -> pd.DataFrame:
+    """Return, for every taxon, the expected number of sites where its records are
+    false and where it was missed, from the AI's calibrated mistakes (``chances``, see
+    ``uncertainty.load``)."""
+    from camtraptools import uncertainty
+
+    rows = []
+    for name, history in histories.items():
+        certainty = uncertainty.cell_certainty(chances, name, effort, occasion_days)
+        false_sites, missed_sites = uncertainty.site_doubt(history, certainty)
+        rows.append({"taxon": name, "expectedFalseSites": round(false_sites, 1), "expectedMissedSites": round(missed_sites, 1)})
+    return pd.DataFrame(rows, columns=["taxon", "expectedFalseSites", "expectedMissedSites"]).set_index("taxon")
+
+
 def file_name(taxon: str) -> str:
     """Return a file name for a taxon's history, e.g. ``Oryx_gazella.csv``."""
     return taxon.replace(" ", "_") + ".csv"
@@ -329,6 +344,7 @@ def analyse(
     min_activity_events: int = activity.DEFAULT_MIN_EVENTS,
     occupancy_covariates: list[str] | None = None,
     detection_covariates: list[str] | None = None,
+    chances=None,
 ) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
     """Write a detection history per taxon in ``out_dir/histories/``, the sampling
     effort in ``effort.csv``, the relative abundance index per site in ``rai.csv`` and,
@@ -340,7 +356,9 @@ def analyse(
     and returned in ``summary.attrs["richness"]``. With ``occupancy_covariates`` or
     ``detection_covariates`` (deployment columns), occupancy models with those site
     covariates are compared by AIC (see ``covariates.run``), with the result in
-    ``summary.attrs["covariates"]``.
+    ``summary.attrs["covariates"]``. With ``chances`` (the AI's calibrated mistakes,
+    from ``uncertainty.load``), the summary also has the expected number of sites per
+    taxon with a false record and where it was missed.
 
     ``events`` comes from ``animal_events``. By default every species is included;
     ``all_taxa`` adds higher taxa such as ``Bovidae``, and ``taxa`` chooses taxa by
@@ -367,6 +385,8 @@ def analyse(
     if histories:
         summary.insert(1, "rai", rai.loc["all sites"].reindex(summary.index))
         summary = summary.join(occupancy_models(histories, effort, occasion_days))
+        if chances is not None:
+            summary = summary.join(site_doubts(histories, effort, occasion_days, chances))
     species_events = named[named["scientificName"].isin(chosen)]
     peaks, overlaps = activity.run(species_events, out_dir, min_activity_events)
     estimate = richness.run(species_events, int(effort.to_numpy().sum()), out_dir)
@@ -392,12 +412,25 @@ def run(
     min_activity_events: int = activity.DEFAULT_MIN_EVENTS,
     occupancy_covariates: list[str] | None = None,
     detection_covariates: list[str] | None = None,
+    ai_errors: bool = False,
 ) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
     """Run ``analyse`` on the package's events, using reviewed decisions where there
-    are any."""
+    are any. With ``ai_errors``, also estimate the sites each taxon's results may have
+    wrong because of the AI's mistakes, calibrated on the reviews."""
     deployments = pd.read_csv(package_dir / "deployments.csv", dtype=str)
     events = animal_events(event_observations(package_dir), deployments)
+    chances = None
+    if ai_errors:
+        from camtraptools import uncertainty
+
+        chances = uncertainty.load(package_dir, deployments)
+        if chances.reviewed < uncertainty.MIN_REVIEWS:
+            raise ValueError(
+                f"estimating AI mistakes needs at least {uncertainty.MIN_REVIEWS} reviewed events to learn how "
+                f"often the AI is wrong, and there are {chances.reviewed}; review some first, for example with "
+                "`camtraptools review --order plan`"
+            )
     return analyse(
         events, deployments, out_dir, occasion_days, taxa, all_taxa, min_activity_events,
-        occupancy_covariates, detection_covariates,
+        occupancy_covariates, detection_covariates, chances,
     )

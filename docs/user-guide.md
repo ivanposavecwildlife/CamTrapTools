@@ -18,7 +18,7 @@ Windows), your images, and about an hour for a first survey.
 6. [Step 2: check the cameras (`check`, `report`)](#step-2-check-the-cameras-check-report)
 7. [Step 3: find and identify animals (`detect` or `import`)](#step-3-find-and-identify-animals-detect-or-import)
 8. [Step 4: group images into visits (`events`)](#step-4-group-images-into-visits-events)
-9. [Step 5: review the AI (`review`, `review-stats`)](#step-5-review-the-ai-review-review-stats)
+9. [Step 5: review the AI (`review`, `plan`, `review-stats`)](#step-5-review-the-ai-review-plan-review-stats)
 10. [Step 6: measure the AI (`evaluate`, `labels`)](#step-6-measure-the-ai-evaluate-labels)
 11. [Step 7: adapt the AI to your region (`crops`, `adapt`)](#step-7-adapt-the-ai-to-your-region-crops-adapt)
 12. [Step 8: ecological results (`ecology`, `summary`, `compare`)](#step-8-ecological-results-ecology-summary-compare)
@@ -45,7 +45,7 @@ SD cards ─► ingest ─► check / report ─► detect (or import) ─► ev
 | Quality control | `check`, `report` | Dead batteries, fallen cameras, wrong clocks, broken flashes, as a list and a shareable HTML report |
 | AI | `detect` or `import` | Animals, people and vehicles found and identified in every image |
 | Visits | `events` | Images grouped into independent visits, with a species and count for each |
-| Human check | `review`, `review-stats` | A browser app to confirm or correct the AI, least confident decisions first |
+| Human check | `review`, `plan`, `review-stats` | A browser app to confirm or correct the AI, least confident decisions first, and a plan of which events to review, per species, until the results stop depending on AI mistakes |
 | Accuracy | `labels`, `evaluate` | Your existing labels imported; how often the AI is right per species, which confidence to trust, and a report of its mistakes |
 | Regional AI | `crops`, `adapt` | A version of the AI fitted to your area's species and cameras |
 | Ecology | `ecology`, `compare` | Relative abundance, occupancy (also with site covariates), daily activity and overlap, species richness, and how much AI mistakes change them |
@@ -120,7 +120,7 @@ camtraptools --version
 ```
 
 ```
-CamTrapTools 0.7.1
+CamTrapTools 0.8.0
 ```
 
 `camtraptools --help` lists all commands, and `camtraptools COMMAND --help` explains
@@ -409,7 +409,7 @@ confidence, and one count: the most animals seen in any single image. In this ex
 Change the 30-minute rule with `--gap 60`. Run `events` again whenever you rerun
 `detect` or `import`.
 
-## Step 5: review the AI (`review`, `review-stats`)
+## Step 5: review the AI (`review`, `plan`, `review-stats`)
 
 ```bash
 camtraptools review my_survey --images sd_cards --reviewer "Your Name"
@@ -431,11 +431,56 @@ Events are shown **least confident first**. On a Kgalagadi sample, every event t
 did not get exactly right was among the least confident 22%. On the full season,
 reviewing the least confident 20% of events recovered all but one of the species the
 AI had missed, and more than half of the species-at-site records. You rarely need to
-review everything. Use `--order time` to go through events in time order instead.
+review everything. Use `--order time` to go through events in time order instead, or
+`--order plan` to follow the review plan (below).
 
 Stop the app with Ctrl+C. Decisions are saved as you go, in `reviews.csv`, and added
 to `observations.csv` as human observations next to the machine's. Every later step
 uses your decision wherever you made one.
+
+### How much to review: the review plan
+
+How many events are enough depends on the survey and on the species. `plan` works it
+out from what you have reviewed so far:
+
+```bash
+camtraptools plan my_survey
+```
+
+```
+The AI's confidence was calibrated on 25 reviewed events (intercept 1.58, slope 0.79; 0 and 1 would mean its confidence is right as it is).
+
+Per species (records: site-occasions of 7 days where the results have it; in doubt: how many of those cells are expected to be wrong, including missed records):
+                       records  inDoubt  expectedFalseSites  expectedMissedSites  toReview  leftInDoubt              plan
+taxon
+Oryx gazella                60    18.13                 0.0                  3.5        79         2.68  review 79 events
+Ardeotis kori                9     8.30                 0.1                  2.3        58         0.27  review 58 events
+Raphicerus campestris       24     6.57                 0.1                  2.0        27         1.14  review 27 events
+Vulpes chama                 1     7.81                 0.0                  5.7         9         7.28   review 9 events
+Canis mesomelas             29     6.43                 0.0                  0.7         8         1.16   review 8 events
+…
+Connochaetes taurinus        2     0.31                 0.0                  0.3         0         0.31            stable
+
+Review 169 events in all, with `camtraptools review --order plan`.
+```
+
+It uses your reviews to learn how often the AI is wrong at each confidence level and
+for each label, and what the animal usually was when it was wrong. From that it
+estimates, for each species, how many of its records (a site in one week) are probably
+false and where it was probably missed: in this example, Cape fox (*Vulpes chama*) was
+recorded at one site but was probably missed at about six more, because the AI often
+called it only "Canidae". It then lists the events whose review would fix the most,
+until each species' doubt is small: at most 5% of its records (`--tolerance`), and
+never events with less than a 1 in 20 chance of changing a record (`--min-gain`).
+Species that need nothing are **stable**; species the AI never named but your
+corrections show are probably there are listed separately.
+
+Review the planned events with `review --order plan`, then run `plan` again: what you
+corrected changes what the AI is likely to have got wrong elsewhere. Before any
+review, the AI's confidence is taken at face value; review the least confident 20 or
+so events first to calibrate it. On two test surveys, reviewing in plan order left
+about half as many wrong species-at-site records as the same number of least
+confident events ([Planning the review](review-plan.md)).
 
 **Check your own reviewing:**
 
@@ -758,6 +803,27 @@ By default only species are analysed; events identified only to a higher taxon a
 listed as left out. Use `--all-taxa` to include them or `--taxon "Vulpes chama"` to
 choose species.
 
+**How much do the AI's mistakes affect each species?** With `--ai-errors` (after at
+least 20 reviewed events), `ecology` adds the expected number of sites per species
+with a false record and where the species was missed, learned from your reviews as in
+[the review plan](#how-much-to-review-the-review-plan):
+
+```
+Sites in doubt because of AI mistakes (calibrated on your reviews): expected sites with a false record and where the taxon was missed:
+                          sitesDetected  expectedFalseSites  expectedMissedSites     check
+taxon
+Oryx gazella                         15                 0.0                  3.5  ⚠ review
+Canis mesomelas                      13                 0.0                  0.7
+Raphicerus campestris                11                 0.1                  2.0  ⚠ review
+Tragelaphus oryx                      3                 0.0                  5.4  ⚠ review
+…
+⚠ marks results that may change with review; `camtraptools plan` lists the events to check.
+```
+
+A species with one or more sites in doubt has results that may still change with
+review: its naive occupancy may be too low (missed sites) or too high (false records).
+The columns are also saved in `occupancy.csv`.
+
 ### Share the results
 
 ```bash
@@ -770,7 +836,8 @@ relative abundance index, sites, naive and modelled occupancy and busiest time o
 the daily activity chart with overlaps, species richness with the accumulation curve,
 how the species were identified (AI, adapted layer, how many events a person
 reviewed, and accuracy if `evaluate` was run), and the methods and their limits in
-plain language. It works offline, in light and dark mode, and on a phone.
+plain language. It works offline, in light and dark mode, and on a phone. With
+`--ai-errors`, the species table also shows the sites in doubt for each species.
 
 ### How much do AI mistakes change the results?
 
@@ -859,8 +926,10 @@ camtraptools ingest sd_cards --out survey --field-sheet field_sheet.csv
 camtraptools check survey
 camtraptools detect survey --images sd_cards --country ZAF
 camtraptools events survey
-camtraptools review survey --images sd_cards --reviewer "Your Name"   # least confident 20% or more
-camtraptools ecology survey --out ecology
+camtraptools review survey --images sd_cards --reviewer "Your Name"   # least confident 20 or so, to calibrate
+camtraptools plan survey
+camtraptools review survey --images sd_cards --reviewer "Your Name" --order plan   # then plan again
+camtraptools ecology survey --out ecology --ai-errors
 camtraptools summary survey --out summary.html --title "…"
 camtraptools export survey --out publish --title "…" --contributor "…" --timezone Africa/Johannesburg --exclude-humans
 ```
@@ -891,6 +960,7 @@ results.
 | `speciesnet.partial.json` | `detect` | Progress of an unfinished run; removed when it finishes |
 | `reviews.csv` | `review` | Your decisions, with reviewer and time |
 | `evaluation.csv` | `evaluate` | Per-event comparison with the reference |
+| `review_plan.csv`, `review_plan_species.csv` | `plan` | The events to review in order, with the species each matters for; each species' doubt |
 
 All are plain CSV or JSON, so they open in Excel, R or Python. Do not edit
 `observations.csv` by hand; correct labels through `review`, which keeps the machine's
@@ -913,6 +983,7 @@ original answer next to yours.
 | `ingest` finds one deployment per site instead of per camera | Your cards are organised in more levels; use `--folder-depth 2` |
 | `detect` stopped halfway | Run the same command again; it continues from the last save |
 | Videos have the wrong time | The camera stored no recording time and the file date was used; copy cards so file dates are kept, or correct the clock with `cameraTime` and `actualTime` |
+| `--ai-errors` needs at least 20 reviewed events | Review some events first (`review`, least confident first), then run it again |
 | `labels` reports names it does not recognise | Run `detect` once so SpeciesNet's taxonomy is available, or map the names with `--names` |
 
 ## Command reference
@@ -926,13 +997,14 @@ original answer next to yours.
 | `import PACKAGE RESULTS` | Use another tool's results | `--threshold` |
 | `events PACKAGE` | Independent visits | `--gap` |
 | `review PACKAGE` | Review app | `--images`, `--reviewer`, `--order`, `--port`, `--no-open-browser` |
+| `plan PACKAGE` | Which events to review, per species | `--tolerance`, `--min-gain`, `--occasion-days`, `--taxon`, `--all-taxa` |
 | `review-stats PACKAGE` | Review summary | |
 | `labels PACKAGE SOURCE` | Import existing labels as a truth file | `--out`, `--format`, `--species-column`, `--path-column`, `--file-column`, `--folder-column`, `--names` |
 | `evaluate PACKAGE` | Accuracy and thresholds | `--truth`, `--target-precision`, `--report`, `--images`, `--deployment` |
 | `crops PACKAGE` | Training crops | `--images`, `--out`, `--truth`, `--padding`, `--val`, `--test`, `--seed` |
 | `adapt CROPS` | Train the adapted layer | `--out`, `--epochs`, `--learning-rate`, `--balanced`, `--seed`, `--device` |
-| `ecology PACKAGE` | Occupancy, abundance index, activity and richness | `--out`, `--occasion-days`, `--taxon`, `--all-taxa`, `--min-activity-events`, `--occupancy-covariate`, `--detection-covariate` |
-| `summary PACKAGE` | One-page HTML summary of the results | `--out`, `--title`, `--occasion-days`, `--min-activity-events` |
+| `ecology PACKAGE` | Occupancy, abundance index, activity and richness | `--out`, `--occasion-days`, `--taxon`, `--all-taxa`, `--min-activity-events`, `--occupancy-covariate`, `--detection-covariate`, `--ai-errors` |
+| `summary PACKAGE` | One-page HTML summary of the results | `--out`, `--title`, `--occasion-days`, `--min-activity-events`, `--ai-errors` |
 | `compare PACKAGE` | Compare labellings | `--out`, `--truth`, `--other`, `--occasion-days`, `--min-activity-events` |
 | `export PACKAGE` | Camtrap DP for GBIF | `--out`, `--title`, `--contributor`, `--timezone`, `--sampling-design`, `--license`, `--media-license`, `--exclude-humans`, `--coordinate-decimals` |
 
@@ -946,3 +1018,6 @@ downloads the data, and reports how SpeciesNet, adaptation and review compare.
 
 The [Orinoquía validation](validation-orinoquia.md) runs it on 6,416 images from 48
 cameras in Colombia, with expert labels in COCO Camera Traps format.
+
+[Planning the review](review-plan.md) tests the review plan on both surveys: how many
+events it takes to fix the results, against reviewing the least confident first.

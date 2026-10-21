@@ -374,7 +374,7 @@ def test_review_command_rejects_unknown_order(make_image, tmp_path):
     result = runner.invoke(app, ["review", str(tmp_path / "package"), "--images", str(tmp_path / "images"), "--order", "random"])
 
     assert result.exit_code == 1
-    assert "--order must be one of: uncertainty, time" in result.output
+    assert "--order must be one of: uncertainty, plan, time" in result.output
 
 
 def test_review_stats_command_without_reviews(make_image, tmp_path):
@@ -801,3 +801,28 @@ def test_summary_command_writes_a_page(make_image, tmp_path):
     assert "Oryx gazella" in page
     assert "No events were reviewed by a person" in page
     assert "Species richness" in page
+
+
+def test_plan_command_reports_species_and_writes_the_plan(tmp_path):
+    from test_uncertainty import SURVEY, make_survey
+
+    package = make_survey(tmp_path, SURVEY)
+
+    result = runner.invoke(app, ["plan", str(package)])
+
+    assert result.exit_code == 0, result.output
+    assert "No reviews yet" in result.output
+    assert "Oryx gazella" in result.output
+    assert "camtraptools review --order plan" in result.output
+    assert (package / "review_plan.csv").exists()
+
+
+def test_ecology_command_with_ai_errors_needs_reviews(tmp_path):
+    from test_uncertainty import SURVEY, make_survey
+
+    package = make_survey(tmp_path, SURVEY)
+
+    result = runner.invoke(app, ["ecology", str(package), "--out", str(tmp_path / "out"), "--ai-errors"])
+
+    assert result.exit_code == 1
+    assert "at least 20 reviewed events" in result.output

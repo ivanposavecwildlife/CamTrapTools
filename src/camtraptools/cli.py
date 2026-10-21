@@ -23,6 +23,7 @@ from camtraptools import (
     importer,
     ingest,
     labels,
+    plan,
     report,
     review,
     richness,
@@ -429,7 +430,7 @@ def review_cmd(
         str | None, typer.Option(help="Name recorded with your review decisions (default: your user name).")
     ] = None,
     order: Annotated[
-        str, typer.Option(help="Order of events: uncertainty (least confident first) or time.")
+        str, typer.Option(help="Order of events: uncertainty (least confident first), plan (the review plan first) or time.")
     ] = "uncertainty",
     port: Annotated[int, typer.Option(help="Port for the local web server; another is used if it is busy.")] = 8765,
     open_browser: Annotated[bool, typer.Option(help="Open the review page in the browser.")] = True,
@@ -497,6 +498,73 @@ def review_stats_cmd(
     speed = review_data.review_speed(compared["reviewedAt"])
     if speed["perMinute"]:
         typer.echo(f"\nSpeed: {speed['perMinute']} decisions per minute over {speed['minutes']} active minutes.")
+
+
+@app.command("plan")
+def plan_cmd(
+    package: Annotated[
+        Path,
+        typer.Argument(exists=True, file_okay=False, help="Package folder with events from `camtraptools events`."),
+    ],
+    occasion_days: Annotated[
+        int, typer.Option(min=1, help="Days per sampling occasion, as in `camtraptools ecology`.")
+    ] = ecology.DEFAULT_OCCASION_DAYS,
+    tolerance: Annotated[
+        float,
+        typer.Option(min=0.0, max=1.0, help="Doubt to leave per species, as a share of its records (0.05 = 1 in 20)."),
+    ] = plan.DEFAULT_TOLERANCE,
+    min_gain: Annotated[
+        float,
+        typer.Option(min=0.0, max=1.0, help="Skip events with less than this chance of correcting a record."),
+    ] = plan.DEFAULT_MIN_GAIN,
+    taxon: Annotated[list[str] | None, typer.Option(help="Only this taxon; repeat for several.")] = None,
+    all_taxa: Annotated[bool, typer.Option(help="Include higher taxa such as Bovidae, not only species.")] = False,
+) -> None:
+    """Plan the review: how many events to check per species until its results stop depending on AI mistakes."""
+    if not (package / detect.OBSERVATIONS_FILE).exists():
+        typer.echo(f"Error: no observations.csv in {package}; run `camtraptools detect` first.", err=True)
+        raise typer.Exit(1)
+    try:
+        species, events, chances = plan.run(package, occasion_days, taxon, all_taxa, tolerance, min_gain)
+    except ValueError as error:
+        typer.echo(f"Error: {error}", err=True)
+        raise typer.Exit(1) from error
+    calibration = chances.calibration
+    if chances.reviewed:
+        typer.echo(
+            f"The AI's confidence was calibrated on {crops.plural(chances.reviewed, 'reviewed event')} "
+            f"(intercept {calibration.intercept:.2f}, slope {calibration.slope:.2f}; 0 and 1 would mean its "
+            "confidence is right as it is)."
+        )
+    else:
+        typer.echo("No reviews yet, so the AI's confidence is taken at face value; the plan improves as you review.")
+    if species.empty:
+        typer.echo("No species to plan for.")
+        raise typer.Exit(0)
+    typer.echo(
+        f"\nPer species (records: site-occasions of {occasion_days} days where the results have it; in doubt: "
+        "how many of those cells are expected to be wrong, including missed records):"
+    )
+    table = species.copy()
+    table["plan"] = [
+        "stable" if row.toReview == 0 else f"review {crops.plural(int(row.toReview), 'event')}"
+        for row in species.itertuples()
+    ]
+    typer.echo(table.to_string())
+    missed = species[(species["records"] == 0) & (species["expectedMissedSites"] >= plan.MISSED_SITES_TO_LIST)]
+    if not missed.empty:
+        typer.echo(
+            "\nNever named by the AI, but probably present (from your corrections): "
+            + ", ".join(f"{name} (~{row.expectedMissedSites:g} sites)" for name, row in missed.iterrows())
+        )
+    total = len(events)
+    if total:
+        minutes = plan.minutes_needed(package, total)
+        timing = f", about {minutes:.0f} minutes at your speed so far" if minutes else ""
+        typer.echo(f"\nReview {crops.plural(total, 'event')} in all{timing}, with `camtraptools review --order plan`.")
+    else:
+        typer.echo("\nEvery species is stable: more review would barely change the results.")
+    typer.echo(f"Wrote {package / plan.PLAN_FILE} and {package / plan.SPECIES_FILE}")
 
 
 @app.command("evaluate")
@@ -703,6 +771,9 @@ def ecology_cmd(
         list[str] | None,
         typer.Option(help="Field-sheet column that may affect detection, e.g. cameraHeight; repeatable."),
     ] = None,
+    ai_errors: Annotated[
+        bool, typer.Option(help="Also estimate the sites per species in doubt because of AI mistakes (needs 20+ reviews).")
+    ] = False,
 ) -> None:
     """Estimate occupancy (naive and modelled) and daily activity for each species."""
     if not (package / detect.OBSERVATIONS_FILE).exists():
@@ -710,7 +781,8 @@ def ecology_cmd(
         raise typer.Exit(1)
     try:
         summary, left_out, overlaps = ecology.run(
-            package, out, occasion_days, taxon, all_taxa, min_activity_events, occupancy_covariate, detection_covariate
+            package, out, occasion_days, taxon, all_taxa, min_activity_events, occupancy_covariate, detection_covariate,
+            ai_errors,
         )
     except ValueError as error:
         typer.echo(f"Error: {error}", err=True)
@@ -750,6 +822,8 @@ def ecology_cmd(
             "detectionPerOccasion: chance of recording the species in one full occasion where it is present; "
             "missedAtOccupiedSite: chance of never recording it over the survey."
         )
+    if ai_errors:
+        report_ai_errors(summary)
     report_activity(summary, overlaps, min_activity_events)
     report_richness(summary.attrs.get("richness"))
     report_covariates(summary.attrs.get("covariates"))
@@ -763,6 +837,21 @@ def ecology_cmd(
     )
     if (out / activity.PLOT_FILE).exists() and "activityPeak" in summary.columns and summary["activityPeak"].notna().any():
         typer.echo(f"Wrote {out / activity.ACTIVITY_FILE}, {out / activity.OVERLAP_FILE} and {out / activity.PLOT_FILE}")
+
+
+def report_ai_errors(summary: pd.DataFrame) -> None:
+    """Print the expected number of sites per taxon with a false record and where it
+    was missed, flagging taxa whose results depend on the AI's mistakes."""
+    table = summary[["sitesDetected", "expectedFalseSites", "expectedMissedSites"]].copy()
+    doubt = table["expectedFalseSites"] + table["expectedMissedSites"]
+    table["check"] = doubt.map(lambda value: "⚠ review" if value >= ecology.SITES_IN_DOUBT_TO_FLAG else "")
+    typer.echo(
+        "\nSites in doubt because of AI mistakes (calibrated on your reviews): expected sites with a false record "
+        "and where the taxon was missed:"
+    )
+    typer.echo(table.to_string(na_rep="–"))
+    if (doubt >= ecology.SITES_IN_DOUBT_TO_FLAG).any():
+        typer.echo("⚠ marks results that may change with review; `camtraptools plan` lists the events to check.")
 
 
 def report_activity(summary: pd.DataFrame, overlaps: pd.DataFrame, min_events: int) -> None:
@@ -990,13 +1079,16 @@ def summary_cmd(
     min_activity_events: Annotated[
         int, typer.Option(min=2, help="Fewest events for a species' activity curve.")
     ] = activity.DEFAULT_MIN_EVENTS,
+    ai_errors: Annotated[
+        bool, typer.Option(help="Add the sites per species in doubt because of AI mistakes (needs 20+ reviews).")
+    ] = False,
 ) -> None:
     """Write a one-page HTML summary of the survey's results to share with a project."""
     if not (package / detect.OBSERVATIONS_FILE).exists():
         typer.echo(f"Error: no observations.csv in {package}; run `camtraptools detect` first.", err=True)
         raise typer.Exit(1)
     try:
-        summary.run(package, out, title, occasion_days, min_activity_events)
+        summary.run(package, out, title, occasion_days, min_activity_events, ai_errors)
     except ValueError as error:
         typer.echo(f"Error: {error}", err=True)
         raise typer.Exit(1) from error

@@ -63,6 +63,17 @@ def free_port(preferred: int) -> int:
             return probe.getsockname()[1]
 
 
+def planned_first(package_dir: Path, events: pd.DataFrame) -> pd.DataFrame:
+    """Return the events with those of a fresh review plan first, in the plan's
+    order, followed by the rest least confident first."""
+    from camtraptools import plan
+
+    _, planned, _ = plan.run(package_dir)
+    position = {event_id: number for number, event_id in enumerate(planned["eventID"])}
+    rank = events["eventID"].map(position).fillna(len(position))
+    return events.assign(rank=rank).sort_values("rank", kind="stable").drop(columns="rank").reset_index(drop=True)
+
+
 def create_app(package_dir: Path, images_dir: Path, reviewer: str = "reviewer", order: str = "uncertainty") -> FastAPI:
     """Return the review web app for the package, serving images from ``images_dir``,
     recording decisions under the name ``reviewer`` and showing events in ``order``."""
@@ -71,6 +82,8 @@ def create_app(package_dir: Path, images_dir: Path, reviewer: str = "reviewer", 
     frames = video_frames(package_dir)
     machine = observations[observations["classificationMethod"] != "human"]
     events = order_events(machine[machine["observationLevel"] == "event"], machine, order)
+    if order == "plan":
+        events = planned_first(package_dir, events)
     event_ids = list(events["eventID"])
     taxa = sorted(set(machine["scientificName"].dropna()) | set(names))
     token = secrets.token_urlsafe(16)

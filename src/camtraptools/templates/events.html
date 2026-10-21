@@ -26,7 +26,7 @@
 <main>
 <h1>All events</h1>
 {% set reviewed = events | selectattr("eventID", "in", done.index) | list | length %}
-<p class="meta">{{ reviewed }} of {{ events | length }} reviewed · {{ "least confident first" if order == "uncertainty" else "in time order" }}{% if reviewed == events | length %} · ✓ all done{% endif %}</p>
+<p class="meta">{{ reviewed }} of {{ events | length }} reviewed · {{ {"uncertainty": "least confident first", "plan": "review plan first", "time": "in time order"}[order] }}{% if reviewed == events | length %} · ✓ all done{% endif %}</p>
 <div class="table-scroll">
 <table>
 <thead><tr><th scope="col">Event</th><th scope="col">Start</th><th scope="col">AI decision</th><th scope="col" class="num">AI confidence</th><th scope="col">Review</th></tr></thead>

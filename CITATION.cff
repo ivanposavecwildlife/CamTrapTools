@@ -9,8 +9,8 @@ doi: "10.5281/zenodo.23500635"
 repository-code: "https://github.com/ivanposavecwildlife/CamTrapTools"
 url: "https://github.com/ivanposavecwildlife/CamTrapTools"
 license: MIT
-version: "0.7.1"
-date-released: "2026-10-20"
+version: "0.8.0"
+date-released: "2026-10-21"
 keywords:
   - camera traps
   - wildlife monitoring

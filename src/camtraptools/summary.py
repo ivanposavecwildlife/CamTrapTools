@@ -40,6 +40,13 @@ def species_rows(summary: pd.DataFrame) -> list[dict]:
                     f"{row['occupancyLower']:.2f}–{row['occupancyUpper']:.2f}" if pd.notna(modelled) else ""
                 ),
                 "warning": row["warning"] if isinstance(row.get("warning"), str) else "",
+                "doubt": (
+                    f"{row['expectedFalseSites']:g} / {row['expectedMissedSites']:g}"
+                    if pd.notna(row.get("expectedFalseSites"))
+                    else ""
+                ),
+                "doubtful": pd.notna(row.get("expectedFalseSites"))
+                and row["expectedFalseSites"] + row["expectedMissedSites"] >= ecology.SITES_IN_DOUBT_TO_FLAG,
                 "peak": row["activityPeak"] if isinstance(row.get("activityPeak"), str) else "–",
             }
         )
@@ -80,13 +87,17 @@ def build(
     title: str | None = None,
     occasion_days: int = ecology.DEFAULT_OCCASION_DAYS,
     min_activity_events: int = activity.DEFAULT_MIN_EVENTS,
+    ai_errors: bool = False,
 ) -> str:
-    """Return the HTML summary of the survey in ``package_dir``."""
+    """Return the HTML summary of the survey in ``package_dir``, with the sites per
+    species in doubt because of AI mistakes if ``ai_errors``."""
     media, deployments = check.load_package(package_dir)
     issues = check.run(package_dir)
     with tempfile.TemporaryDirectory() as folder:
         out = Path(folder)
-        summary, left_out, overlaps = ecology.run(package_dir, out, occasion_days, min_activity_events=min_activity_events)
+        summary, left_out, overlaps = ecology.run(
+            package_dir, out, occasion_days, min_activity_events=min_activity_events, ai_errors=ai_errors
+        )
         effort = pd.read_csv(out / ecology.EFFORT_FILE, index_col="site")
         activity_chart = (out / activity.PLOT_FILE).read_text(encoding="utf-8") if (out / activity.PLOT_FILE).exists() else ""
         richness_chart = (out / richness.PLOT_FILE).read_text(encoding="utf-8") if (out / richness.PLOT_FILE).exists() else ""
@@ -114,6 +125,7 @@ def build(
         richness=summary.attrs.get("richness"),
         richness_chart=Markup(richness_chart),
         labels=labels,
+        ai_errors=ai_errors,
         version=__version__,
     )
 
@@ -124,7 +136,8 @@ def run(
     title: str | None = None,
     occasion_days: int = ecology.DEFAULT_OCCASION_DAYS,
     min_activity_events: int = activity.DEFAULT_MIN_EVENTS,
+    ai_errors: bool = False,
 ) -> None:
     """Write the HTML summary of the survey in ``package_dir`` to ``out_file``."""
     out_file.parent.mkdir(parents=True, exist_ok=True)
-    out_file.write_text(build(package_dir, title, occasion_days, min_activity_events), encoding="utf-8")
+    out_file.write_text(build(package_dir, title, occasion_days, min_activity_events, ai_errors), encoding="utf-8")

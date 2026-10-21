@@ -6,6 +6,32 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-21
+
+Review that knows when to stop: the toolkit plans which events to review, per
+species, until the results no longer depend on the AI's mistakes, and says how many
+sites are still in doubt.
+
+### Added
+
+- `plan`: calibrates the AI on the reviews (how often each label is right at each
+  confidence, and what the animal usually was when it was wrong), estimates for each
+  species the site-occasions in doubt, the expected sites with a false record and
+  where it was missed, and lists the events to review in order until each species is
+  stable (`--tolerance`, `--min-gain`). Writes `review_plan.csv` and
+  `review_plan_species.csv`, and lists species the AI never named but the corrections
+  show are probably present.
+- `review --order plan` shows the events of a fresh review plan first.
+- `ecology --ai-errors` and `summary --ai-errors` add the sites in doubt per species
+  and flag species whose results may change with more review (after 20 or more
+  reviewed events).
+- `docs/review-plan.md` and `examples/planned_review.py`: on Snapshot Kgalagadi and
+  Orinoquía, reviewing in plan order left about half as many wrong species-at-site
+  records as reviewing the same number of least confident events, and the expected
+  number of wrong sites followed the real one. An occupancy model weighting records by
+  their chance of being true was also tested; it was not more accurate and is not
+  included.
+
 ## [0.7.1] - 2026-10-20
 
 Tested on a second survey (Orinoquía, Colombia): COCO Camera Traps labels, smarter name
@@ -358,6 +384,7 @@ First release: ingest, quality checks and an HTML health report.
   summary table and all issues, in light and dark mode.
 - Continuous integration on Python 3.11–3.14 (Linux) and on Windows and macOS.
 
+[0.8.0]: https://github.com/ivanposavecwildlife/CamTrapTools/releases/tag/v0.8.0
 [0.7.1]: https://github.com/ivanposavecwildlife/CamTrapTools/releases/tag/v0.7.1
 [0.7.0]: https://github.com/ivanposavecwildlife/CamTrapTools/releases/tag/v0.7.0
 [0.6.0]: https://github.com/ivanposavecwildlife/CamTrapTools/releases/tag/v0.6.0

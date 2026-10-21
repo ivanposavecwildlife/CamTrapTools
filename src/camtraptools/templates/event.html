@@ -65,7 +65,7 @@
   </div>
   <nav>
     {% if previous_id %}<a href="/events/{{ previous_id }}" id="previous">← Previous</a>{% else %}<span class="disabled">← Previous</span>{% endif %}
-    <span>{{ position }} of {{ total }}{% if order == "uncertainty" %} · least confident first{% endif %}</span>
+    <span>{{ position }} of {{ total }}{% if order == "uncertainty" %} · least confident first{% elif order == "plan" %} · review plan first{% endif %}</span>
     {% if next_id %}<a href="/events/{{ next_id }}" id="next">Next →</a>{% else %}<span class="disabled">Next →</span>{% endif %}
   </nav>
 </header>

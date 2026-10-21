@@ -25,7 +25,7 @@ def test_species_rows_format_numbers_and_warnings():
 
     assert rows[0] == {
         "name": "Oryx gazella", "events": 170, "rai": "18.18", "sites": "16/20", "naive": "0.80",
-        "modelled": "0.80", "interval": "0.60–0.94", "warning": "", "peak": "12:00",
+        "modelled": "0.80", "interval": "0.60–0.94", "warning": "", "doubt": "", "doubtful": False, "peak": "12:00",
     }
     assert (rows[1]["modelled"], rows[1]["interval"], rows[1]["peak"]) == ("–", "", "–")
 

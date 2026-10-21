@@ -106,7 +106,7 @@ def prefer_human(observations: pd.DataFrame) -> pd.DataFrame:
     return observations[~replaced]
 
 
-ORDERS = ["uncertainty", "time"]
+ORDERS = ["uncertainty", "plan", "time"]
 
 
 def event_confidence(event: pd.Series, media_observations: pd.DataFrame) -> float:
@@ -131,15 +131,16 @@ def event_confidence(event: pd.Series, media_observations: pd.DataFrame) -> floa
 
 
 def order_events(events: pd.DataFrame, observations: pd.DataFrame, order: str) -> pd.DataFrame:
-    """Return the events with a ``confidence`` column, sorted for review: least
-    confident first (``uncertainty``) or by start time (``time``)."""
+    """Return the events with a ``confidence`` column, sorted for review: by start
+    time (``time``), otherwise least confident first (the review app puts the events
+    of the review plan first for ``plan``)."""
     media_level = observations[observations["observationLevel"] == "media"]
     by_event = dict(list(media_level.groupby("eventID")))
     empty = media_level.iloc[0:0]
     events = events.assign(
         confidence=[event_confidence(event, by_event.get(event["eventID"], empty)) for _, event in events.iterrows()]
     )
-    columns = ["confidence", "eventStart", "eventID"] if order == "uncertainty" else ["eventStart", "eventID"]
+    columns = ["eventStart", "eventID"] if order == "time" else ["confidence", "eventStart", "eventID"]
     return events.sort_values(columns).reset_index(drop=True)
 
 

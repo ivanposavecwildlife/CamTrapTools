@@ -17,9 +17,10 @@ analysis is already wrong.
 CamTrapTools turns a folder of SD-card images into a standard
 [Camtrap DP](https://camtrap-dp.tdwg.org) data package, checks every camera for problems,
 finds and identifies animals with [SpeciesNet](https://github.com/google/cameratrapai),
-counts independent visits, lets a person review the AI's least confident decisions
-first, adapts the AI to the region, estimates occupancy and daily activity, and exports
-a validated package ready to publish on [GBIF](https://www.gbif.org).
+counts independent visits, lets a person review the AI's decisions and plans which
+ones to review until each species' results no longer depend on the AI's mistakes,
+adapts the AI to the region, estimates occupancy and daily activity, and exports a
+validated package ready to publish on [GBIF](https://www.gbif.org).
 
 ```
 SD cards ─► ingest ─► check / report ─► detect (or import) ─► events ─► review ─► ecology ─► export ─► GBIF
@@ -78,6 +79,14 @@ flash (`cam_noflash`) and clock errors.*
 
   ![Review app showing a camera event with the AI's boxes and a human correction](https://raw.githubusercontent.com/ivanposavecwildlife/CamTrapTools/main/docs/review.jpg)
 
+- **`plan`**: plans the review. It learns from your reviews how often the AI is wrong
+  for each label and confidence, and what the animal usually was; estimates for each
+  species how many of its site records are probably false and where it was probably
+  missed; and lists the events to review, in order, until each species' results are
+  stable. `review --order plan` follows it. On two test surveys, reviewing in plan
+  order left about half as many wrong species-at-site records as reviewing the same
+  number of least confident events
+  ([Planning the review](https://github.com/ivanposavecwildlife/CamTrapTools/blob/main/docs/review-plan.md)).
 - **`labels`**: imports labels you already have, from Timelapse, Wildlife Insights,
   another Camtrap DP package, a COCO Camera Traps file (as published with LILA BC
   datasets) or any spreadsheet, as a truth file for `evaluate`, `crops` and `compare`.
@@ -118,11 +127,13 @@ flash (`cam_noflash`) and clock errors.*
   species accumulation curve and the Chao2 estimate show how many species the survey
   likely missed.
   Reviewed decisions replace the AI's, and higher taxa are left out unless asked for
-  (`--all-taxa`, `--taxon`).
+  (`--all-taxa`, `--taxon`). With `--ai-errors`, each species also gets the expected
+  number of sites with a false record and where it was missed, and species whose
+  results may still change with review are flagged.
 - **`summary`**: one HTML page to hand back to a project: key numbers, camera
   problems, a species table with abundance index, occupancy and activity, the activity
   and species-richness charts, how the species were identified, and the methods and
-  their limits in plain language.
+  their limits in plain language; with `--ai-errors`, the sites in doubt per species.
 - **`compare`**: runs the ecology analyses on several labellings of the same survey
   (the AI's labels alone, with human reviews, ground truth from `--truth`, and other
   packages such as one with an adapted layer, `--other adapted=FOLDER`) and reports how
@@ -160,12 +171,14 @@ camtraptools report my_project --out report.html
 camtraptools detect my_project --images sd_cards --country ZAF
 camtraptools events my_project
 camtraptools review my_project --images sd_cards --reviewer "Your Name"
+camtraptools plan my_project
+camtraptools review my_project --images sd_cards --order plan
 camtraptools review-stats my_project
 camtraptools evaluate my_project --report mistakes.html --images sd_cards
 camtraptools crops my_project --images sd_cards --out my_crops
 camtraptools adapt my_crops --out my_model
 camtraptools detect my_project --images sd_cards --adapted my_model
-camtraptools ecology my_project --out my_ecology
+camtraptools ecology my_project --out my_ecology --ai-errors
 camtraptools summary my_project --out summary.html --title "My survey"
 camtraptools compare my_project --truth labels.csv --out my_comparison
 camtraptools export my_project --out publish --title "My survey" \
@@ -275,6 +288,7 @@ SD card ─► ingest/check ─► detect/events ─► review ─► ecology �
 | Real surveys | `labels`, `ingest`, `detect`, `ecology` | Surveys of 100,000+ images with resumable runs, nested folders, clock correction, importing existing labels, relative abundance index, installation from PyPI | ✅ v0.6.0 |
 | Partner deliverables | `summary`, `ecology`, `export`, `ingest --videos` | One-page survey summary, species richness, occupancy with site covariates, privacy on export, videos | ✅ v0.7.0 |
 | Second validation | `labels`, `evaluate` | Orinoquía (Colombia): COCO Camera Traps labels, flexible name matching, "more specific" outcome, Intel Mac support | ✅ v0.7.1 |
+| Review planning | `plan`, `review --order plan`, `ecology --ai-errors` | How many events to review per species, which ones, and the sites still in doubt; validated on Kgalagadi and Orinoquía | ✅ v0.8.0 |
 | Partner surveys | all | Run on real surveys from parks, researchers and NGOs, improve what their data shows, publish to GBIF with their permission | Ongoing |
 
 ## Development

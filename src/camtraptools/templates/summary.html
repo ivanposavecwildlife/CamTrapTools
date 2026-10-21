@@ -83,12 +83,12 @@
 <div class="table-scroll">
 <table>
 <thead><tr><th>Species</th><th class="num">Events</th><th class="num">RAI</th><th class="num">Sites</th>
-<th class="num">Naive occ.</th><th class="num">Occupancy</th><th class="num">Busiest</th></tr></thead>
+<th class="num">Naive occ.</th><th class="num">Occupancy</th>{% if ai_errors %}<th class="num">Sites in doubt</th>{% endif %}<th class="num">Busiest</th></tr></thead>
 <tbody>
 {% for row in species_rows %}<tr><td><em class="species">{{ row.name }}</em></td><td class="num">{{ row.events }}</td>
 <td class="num">{{ row.rai }}</td><td class="num">{{ row.sites }}</td><td class="num">{{ row.naive }}</td>
 <td class="num">{{ row.modelled }}{% if row.interval %}<span class="interval">{{ row.interval }}</span>{% endif %}{% if row.warning %}<span class="warning" title="{{ row.warning }}">⚠ unreliable</span>{% endif %}</td>
-<td class="num">{{ row.peak }}</td></tr>
+{% if ai_errors %}<td class="num">{{ row.doubt }}{% if row.doubtful %}<span class="interval warning" title="Expected to change with more review">⚠ review</span>{% endif %}</td>{% endif %}<td class="num">{{ row.peak }}</td></tr>
 {% endfor %}</tbody>
 </table>
 </div>
@@ -97,7 +97,10 @@ RAI is events per 100 camera-days. Sites: camera sites where the species was rec
 occupancy is that share; occupancy corrects for the species being missed where it is present, with its 95%
 interval below, using {{ occasion_days }}-day sampling occasions, for species recorded at three or more sites.
 ⚠ marks estimates that are unreliable because the species was recorded too rarely (hover for the reason).
-Busiest is the time of day with most activity, for species with {{ min_activity_events }} or more events.</p>
+Busiest is the time of day with most activity, for species with {{ min_activity_events }} or more events.{% if ai_errors %}
+Sites in doubt: the expected number of sites with a false record / where the species was missed because of AI
+mistakes, with the AI's confidence calibrated on {{ labels.reviewed }} reviewed events; ⚠ marks species whose
+results may change with more review.{% endif %}</p>
 {% if left_out %}<p class="note">Events identified only above species level are not in the table:
 {% for name, count in left_out.items() %}{{ name }} ({{ count }}){% if not loop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
 {% else %}
