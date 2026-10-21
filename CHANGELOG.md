@@ -34,6 +34,13 @@ Kgalagadi.
   the target but spread over events each too unlikely to change a record to be worth
   reviewing.
 
+### Fixed
+
+- Subspecies count as species in `ecology`, `summary`, `compare` and `plan`: SpeciesNet
+  names some taxa with three words, such as the African wildcat (*Felis silvestris
+  lybica*), the dingo and domestic goats and chickens, and these were left out as if
+  they were higher taxa.
+
 ## [0.8.0] - 2026-10-21
 
 Review that knows when to stop: the toolkit plans which events to review, per

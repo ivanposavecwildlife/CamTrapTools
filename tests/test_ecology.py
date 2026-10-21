@@ -10,7 +10,13 @@ from camtraptools.detect import OBSERVATION_COLUMNS
 
 @pytest.mark.parametrize(
     ("name", "expected"),
-    [("Oryx gazella", True), ("Bovidae", False), (None, False), ("Canis lupus familiaris", False)],
+    [
+        ("Oryx gazella", True),
+        ("Felis silvestris lybica", True),
+        ("Canis lupus familiaris", True),
+        ("Bovidae", False),
+        (None, False),
+    ],
 )
 def test_is_species(name, expected):
     assert ecology.is_species(name) == expected
@@ -227,3 +233,13 @@ def test_run_writes_relative_abundance(tmp_path):
     assert summary.loc["Vulpes chama", "rai"] == round(2 / 17 * 100, 2)
     rai = pd.read_csv(tmp_path / "out" / ecology.RAI_FILE, index_col="site")
     assert rai.index.tolist() == ["North", "South", "all sites"]
+
+
+def test_run_counts_subspecies_such_as_the_african_wildcat(tmp_path):
+    package = make_package(tmp_path)
+    reviews.save_review(package, "south-0002", "animal", "Felis silvestris lybica", 1, "Tester")
+
+    summary, left_out, _ = ecology.run(package, tmp_path / "out")
+
+    assert summary.loc["Felis silvestris lybica", "sitesDetected"] == 1
+    assert "Felis silvestris lybica" not in left_out

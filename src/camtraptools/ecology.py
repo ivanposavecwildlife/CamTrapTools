@@ -34,9 +34,11 @@ SITES_IN_DOUBT_TO_FLAG = 1.0
 
 
 def is_species(name) -> bool:
-    """Return whether a scientific name is a species (two words) rather than a
+    """Return whether a scientific name is a species or a subspecies (two or three
+    words, such as ``Oryx gazella`` or SpeciesNet's ``Felis silvestris lybica``, the
+    African wildcat, and ``Canis lupus familiaris``, the domestic dog) rather than a
     higher taxon such as ``Bovidae``."""
-    return isinstance(name, str) and len(name.split()) == 2
+    return isinstance(name, str) and len(name.split()) in (2, 3)
 
 
 def active_days(deployments: pd.DataFrame) -> dict[str, set[date]]:
